@@ -20,6 +20,7 @@ from behance_dl.storage import (
 from conftest import FakeClient
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
+JPG = b"\xff\xd8\xff" + b"\x00" * 24
 
 
 def make_plan(destination: Path, *urls: str) -> GalleryPlan:
@@ -174,7 +175,7 @@ def test_save_gallery_removes_a_superseded_file(tmp_path: Path) -> None:
     destination.mkdir()
     stale = destination / "001_a.png"
     stale.write_bytes(b"old")
-    client = FakeClient(images={"https://x/a.jpg": PNG})
+    client = FakeClient(images={"https://x/a.jpg": JPG})
     plan = make_plan(destination, "https://x/a.jpg")
 
     failed = save_gallery(
@@ -193,7 +194,7 @@ def test_save_gallery_keeps_a_locked_superseded_file(tmp_path: Path, monkeypatch
     destination.mkdir()
     stale = destination / "001_a.png"
     stale.write_bytes(b"old")
-    client = FakeClient(images={"https://x/a.jpg": PNG})
+    client = FakeClient(images={"https://x/a.jpg": JPG})
     plan = make_plan(destination, "https://x/a.jpg")
 
     def refuse(path: Path, missing_ok: bool = False) -> None:

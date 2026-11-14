@@ -16,6 +16,7 @@ from .errors import BehanceError
 from .models import GalleryPlan
 from .selection import plan_gallery
 from .storage import load_saved, save_gallery
+from .video import download_videos, no_reuse, reuse_downloaded
 
 
 def print_plan_summary(plan: GalleryPlan) -> None:
@@ -86,9 +87,23 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="per-request timeout in seconds (default: 30)",
     )
     parser.add_argument(
+        "--videos",
+        action="store_true",
+        help="also download video modules, which contacts Adobe's video CDN and needs "
+        'the optional extra for external hosts: pip install "behance-dl[video]"',
+    )
+    parser.add_argument(
+        "--video-height",
+        type=positive_int,
+        default=None,
+        metavar="PX",
+        help="largest video rendition at or below this height, else the smallest available "
+        "(default: the largest available)",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
-        help="ignore the recorded downloads and fetch every image again",
+        help="ignore what is already on disk and fetch every image and video again",
     )
     parser.add_argument(
         "--dry-run",
@@ -146,6 +161,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     continue
                 saved = {} if args.force else load_saved(plan.destination)
                 failed = save_gallery(client, plan, saved, workers=args.workers)
+                if args.videos:
+                    reuse = no_reuse if args.force else reuse_downloaded(args.video_height)
+                    failed += download_videos(
+                        client,
+                        plan.embeds,
+                        plan.destination,
+                        max_height=args.video_height,
+                        reuse=reuse,
+                    )
                 status = 1 if failed else 0
             except BehanceError as error:
                 print(f"error: {error}", file=sys.stderr)

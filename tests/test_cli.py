@@ -150,3 +150,95 @@ def test_interrupt_returns_130(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(cli, "plan_gallery", interrupted)
 
     assert cli.main(["42", "-o", str(tmp_path)]) == 130
+
+
+def test_videos_flag_downloads_videos(tmp_path: Path, monkeypatch) -> None:
+    plan = make_plan(tmp_path / "42_Planned")
+    calls: list[dict] = []
+    monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
+    monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
+
+    def record(client: object, embeds: object, destination: object, **kwargs: object) -> int:
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, "download_videos", record)
+
+    assert cli.main(["42", "-o", str(tmp_path), "--videos", "-j", "1"]) == 0
+    assert calls[0]["max_height"] is None
+    assert calls[0]["reuse"] is not cli.no_reuse
+
+
+def test_videos_are_not_downloaded_without_the_flag(tmp_path: Path, monkeypatch) -> None:
+    plan = make_plan(tmp_path / "42_Planned")
+    monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
+    monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
+
+    def unexpected(*args: object, **kwargs: object) -> int:
+        raise AssertionError("videos must be opt-in")
+
+    monkeypatch.setattr(cli, "download_videos", unexpected)
+
+    assert cli.main(["42", "-o", str(tmp_path), "-j", "1"]) == 0
+
+
+def test_video_failure_marks_the_gallery_failed(tmp_path: Path, monkeypatch) -> None:
+    plan = make_plan(tmp_path / "42_Planned")
+    monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
+    monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
+    monkeypatch.setattr(cli, "download_videos", lambda *args, **kwargs: 1)
+
+    assert cli.main(["42", "-o", str(tmp_path), "--videos", "-j", "1"]) == 1
+
+
+def test_force_passes_no_reuse_to_videos(tmp_path: Path, monkeypatch) -> None:
+    plan = make_plan(tmp_path / "42_Planned")
+    recorded: list[dict] = []
+    monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
+    monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
+
+    def record(client: object, embeds: object, destination: object, **kwargs: object) -> int:
+        recorded.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, "download_videos", record)
+
+    assert cli.main(["42", "-o", str(tmp_path), "--videos", "--force", "-j", "1"]) == 0
+    assert recorded[0]["reuse"] is cli.no_reuse
+
+
+def test_video_height_reaches_the_video_step(tmp_path: Path, monkeypatch) -> None:
+    plan = make_plan(tmp_path / "42_Planned")
+    recorded: list[dict] = []
+    monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
+    monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
+
+    def record(client: object, embeds: object, destination: object, **kwargs: object) -> int:
+        recorded.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, "download_videos", record)
+
+    assert (
+        cli.main(["42", "-o", str(tmp_path), "--videos", "--video-height", "720", "-j", "1"]) == 0
+    )
+    assert recorded[0]["max_height"] == 720
+
+
+def test_video_height_reaches_the_reuse_lookup(tmp_path: Path, monkeypatch) -> None:
+    plan = make_plan(tmp_path / "42_Planned")
+    caps: list[int | None] = []
+    monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
+    monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
+    monkeypatch.setattr(cli, "download_videos", lambda *args, **kwargs: 0)
+
+    def capture(max_height: int | None) -> object:
+        caps.append(max_height)
+        return cli.no_reuse
+
+    monkeypatch.setattr(cli, "reuse_downloaded", capture)
+
+    assert (
+        cli.main(["42", "-o", str(tmp_path), "--videos", "--video-height", "720", "-j", "1"]) == 0
+    )
+    assert caps == [720]

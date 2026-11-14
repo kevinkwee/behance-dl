@@ -11,9 +11,13 @@ import pytest
 
 from behance_dl.client import (
     CHALLENGE_COOKIE,
+    IMAGE,
+    VIDEO,
     BehanceClient,
+    SameHostRedirects,
     detected_suffix,
     parse_retry_after,
+    suffix_from_head,
 )
 from behance_dl.errors import DownloadError, GalleryError
 from conftest import FakeOpener, FakeResponse
@@ -179,3 +183,94 @@ def test_download_retries_a_dropped_connection(tmp_path: Path) -> None:
 def test_client_rejects_invalid_settings(attempts: int, timeout: float) -> None:
     with pytest.raises(ValueError, match="must be"):
         BehanceClient(attempts=attempts, timeout=timeout)
+
+
+def _response(body: bytes, content_type: str) -> FakeResponse:
+    return FakeResponse(body, content_type)
+
+
+MP4_BYTES = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 24
+
+
+def test_image_download_rejects_video_bytes(tmp_path: Path) -> None:
+    client, _opener = make_client([_response(MP4_BYTES, "image/png")], attempts=1)
+
+    with pytest.raises(DownloadError, match="where image/ was expected"):
+        client.download(URL, tmp_path / "001_a.png", kind=IMAGE)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_video_download_accepts_a_media_body(tmp_path: Path) -> None:
+    client, _opener = make_client([_response(MP4_BYTES, "video/mp4")])
+
+    stored = client.download(URL, tmp_path / "001_a.mp4", kind=VIDEO)
+
+    assert stored.suffix == ".mp4"
+    assert stored.read_bytes() == MP4_BYTES
+
+
+@pytest.mark.parametrize(
+    ("body", "content_type"),
+    [
+        (b"<html></html>", "text/html"),
+        (PNG, "image/png"),
+        (PNG, "video/mp4"),
+    ],
+)
+def test_video_download_rejects_non_video_payloads(
+    tmp_path: Path, body: bytes, content_type: str
+) -> None:
+    client, _opener = make_client([_response(body, content_type)], attempts=1)
+
+    with pytest.raises(DownloadError):
+        client.download(URL, tmp_path / "001_a.mp4", kind=VIDEO)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        (MP4_BYTES, ".mp4"),
+        (b"\x00\x00\x00\x1cftypavif" + b"\x00" * 12, ".avif"),
+        (b"\x00\x00\x00\x1cftypheic" + b"\x00" * 12, ".heic"),
+        (b"\x1aE\xdf\xa3" + b"\x00" * 12, ".webm"),
+        (b"plain", None),
+    ],
+)
+def test_suffix_from_head_identifies_containers(head: bytes, expected: str | None) -> None:
+    assert suffix_from_head(head) == expected
+
+
+def _redirect(newurl: str) -> urllib.request.Request:
+    return urllib.request.Request(URL)
+
+
+@pytest.mark.parametrize(
+    "newurl",
+    ["http://www.behance.net/other", "https://evil.example.com/x", "ftp://www.behance.net/x"],
+)
+def test_redirects_off_host_or_off_https_are_refused(newurl: str) -> None:
+    handler = SameHostRedirects()
+
+    with pytest.raises(urllib.error.HTTPError, match="refused redirect"):
+        handler.redirect_request(
+            _redirect(URL), io.BytesIO(b""), 302, "Found", email.message.Message(), newurl
+        )
+
+
+def test_same_host_https_redirects_are_followed() -> None:
+    handler = SameHostRedirects()
+
+    request = handler.redirect_request(
+        _redirect(URL),
+        io.BytesIO(b""),
+        302,
+        "Found",
+        email.message.Message(),
+        "https://www.behance.net/elsewhere",
+    )
+
+    assert request is not None
+    assert request.full_url == "https://www.behance.net/elsewhere"

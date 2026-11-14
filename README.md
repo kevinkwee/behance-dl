@@ -44,7 +44,9 @@ behance-dl 123456789 234567890 345678901 -o downloads
 | `-j`, `--workers N` | Parallel downloads. Default: 4. |
 | `--attempts N` | Attempts per request before giving up. Default: 3. |
 | `--timeout SECONDS` | Per-request timeout. Default: 30. |
-| `--force` | Ignore the saved record and fetch every image again. |
+| `--videos` | Also download video modules. Contacts Adobe's video CDN, and needs the optional extra for external hosts. |
+| `--video-height PX` | Largest video rendition at or below this height, else the smallest available. Default: the largest available. |
+| `--force` | Ignore what is already on disk and fetch every image and video again. |
 | `--dry-run` | List what would be downloaded without writing anything. |
 | `--version` | Print the version and exit. |
 
@@ -55,26 +57,31 @@ behance-dl 123456789 234567890 345678901 -o downloads
   001_0a1b2c3123456789.5f6d7e8f9a0b1.png
   002_4d5e6f7123456789.5f6d7e9a1c2d3.png
   003_8a9b0c1123456789.5f6d7eab2e3f4.jpg
-  embeds.json      # prototypes and video players that are links, not files
-  manifest.json    # which CDN variant produced each saved file
-  project.json     # the full project payload Behance served
+  005_ExampleAsset1_720.mp4    # only with --videos
+  embeds.json                  # prototypes, and video modules as links
+  manifest.json                # which CDN variant produced each saved image
+  project.json                 # the full project payload Behance served
 ```
 
 Files are prefixed with their position in the gallery, so a plain alphabetical listing
 follows the project order. The extension is taken from the file's magic bytes, because
 Behance's CDN sometimes serves JPEG data under a `.png` name.
 
-`embeds.json` records modules that cannot be downloaded as images, such as Figma prototypes
-and Adobe video players, with their source URL, caption and dimensions.
+`embeds.json` records modules that are links rather than files, such as Figma prototypes and
+video modules, with their source URL, caption and dimensions. It is always written, so the
+original page stays reconstructable even when the media itself was downloaded.
 
 ## Re-running, resume and width changes
 
-`manifest.json` records the URL each file came from. A re-run only fetches what is missing,
+`manifest.json` records the URL each image came from. A re-run only fetches what is missing,
 and a run with a different `-W` re-fetches the affected images instead of leaving files at
 the old size. An interrupted run keeps whatever already landed, so `Ctrl+C` followed by the
 same command continues where it stopped.
 
-Delete `manifest.json` (or pass `--force`) to fetch everything again.
+Delete `manifest.json` to re-fetch every image. Videos are not recorded there, because
+their signed URLs expire. Behance videos are matched on disk by position and asset id, and
+external ones by position.
+`--force` re-fetches both images and videos.
 
 ## How it works
 
@@ -97,10 +104,33 @@ Delete `manifest.json` (or pass `--force`) to fetch everything again.
 `https://*.behance.net` are ever requested, so a tampered payload cannot point the tool at
 a local file or a third-party host.
 
+## Videos
+
+Pass `--videos` to download video modules too. Behance hosts video through Adobe's Creative
+Cloud player: the iframe carries no media, but the player page lists the renditions and the
+CDN serves direct MP4 files. The downloader reads the master playlist, picks the best
+rendition (or the best one at or below `--video-height`, else the smallest available), and
+saves it as `005_<asset>_<height>.mp4`.
+
+External hosts such as YouTube and Vimeo need the optional extra:
+
+```console
+pip install "behance-dl[video]"
+```
+
+Without it, each external module is reported as failed and the run exits 1, while the
+module still stays a link in `embeds.json`. A rejected external download never leaves a
+partial file in the gallery folder. Interactive embeds such as Figma prototypes are not video and always stay links.
+
+This is opt-in because it contacts a second set of hosts beyond Behance:
+`www-ccv.adobe.io` for the player page and `cdn-prod-ccv.adobe.com` for the media.
+
 ## Limitations
 
 - Only public projects. Private, removed, or login-gated projects report a clear error.
-- Images only. Prototypes and video modules are recorded as links in `embeds.json`.
+- Images by default. Video needs `--videos`, and external hosts additionally need the
+  `video` extra. Figma prototypes cannot be downloaded because they are rendered live, not
+  encoded as media.
 - Behance can change its page format at any time; the payload shape is checked and a
   mismatch is reported as an error instead of producing an empty folder.
 

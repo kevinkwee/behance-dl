@@ -12,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
@@ -33,8 +34,47 @@ _MAGIC_SUFFIXES = (
     (b"GIF87a", ".gif"),
     (b"GIF89a", ".gif"),
 )
+_IMAGE_BRANDS = frozenset({b"avif", b"avis"})
+_HEIF_BRANDS = frozenset({b"heic", b"heix", b"mif1", b"msf1"})
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class MediaKind:
+    """A media family: the content type it accepts and the suffixes its bytes may carry."""
+
+    content_type_prefix: str
+    suffixes: frozenset[str]
+
+
+IMAGE = MediaKind("image/", frozenset({".png", ".jpg", ".gif", ".webp"}))
+VIDEO = MediaKind("video/", frozenset({".mp4", ".webm"}))
+
+
+class SameHostRedirects(urllib.request.HTTPRedirectHandler):
+    """Refuse a redirect that leaves https or changes host, so allowlists still hold."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: object,
+        code: int,
+        msg: str,
+        headers: object,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        origin = urllib.parse.urlsplit(req.full_url)
+        target = urllib.parse.urlsplit(newurl)
+        if target.scheme != "https" or target.hostname != origin.hostname:
+            raise urllib.error.HTTPError(
+                newurl,
+                code,
+                f"refused redirect to {newurl}",
+                headers,
+                fp,  # type: ignore[arg-type]
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 class BehanceClient:
@@ -55,37 +95,45 @@ class BehanceClient:
         self._attempts = attempts
         self._user_agent = user_agent
         self._jar = http.cookiejar.CookieJar()
-        self._opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self._jar))
+        self._opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self._jar), SameHostRedirects()
+        )
 
     def get_text(self, url: str) -> str:
         """Return the decoded body of a text resource."""
         return self._retry(lambda: self._read_text(url))
 
-    def download(self, url: str, destination: Path) -> Path:
-        """Save a remote image and return where it landed, named after its real format."""
-        return self._retry(lambda: self._transfer(url, destination))
+    def download(self, url: str, destination: Path, *, kind: MediaKind = IMAGE) -> Path:
+        """Save a remote file and return where it landed, named after its real format."""
+        return self._retry(lambda: self._transfer(url, destination, kind))
 
     def _read_text(self, url: str) -> str:
         with self._open(url) as response:
             charset = response.headers.get_content_charset() or "utf-8"
             return response.read().decode(charset, "replace")
 
-    def _transfer(self, url: str, destination: Path) -> Path:
+    def _transfer(self, url: str, destination: Path, kind: MediaKind) -> Path:
         partial = destination.with_name(destination.name + ".part")
         destination.parent.mkdir(parents=True, exist_ok=True)
         try:
-            return self._store_image(url, partial, destination)
+            return self._store_media(url, partial, destination, kind)
         except BaseException:
             partial.unlink(missing_ok=True)
             raise
 
-    def _store_image(self, url: str, partial: Path, destination: Path) -> Path:
+    def _store_media(self, url: str, partial: Path, destination: Path, kind: MediaKind) -> Path:
         expected_size, content_type = self._copy_body(url, partial)
-        if not content_type.startswith("image/"):
-            raise DownloadError(f"{url} answered {content_type} instead of an image")
+        if not content_type.startswith(kind.content_type_prefix):
+            raise DownloadError(
+                f"{url} answered {content_type} instead of {kind.content_type_prefix}*"
+            )
         suffix = detected_suffix(partial)
         if suffix is None:
-            raise DownloadError(f"{url} did not return a recognised image format")
+            raise DownloadError(f"{url} did not return a recognised file format")
+        if suffix not in kind.suffixes:
+            raise DownloadError(
+                f"{url} returned {suffix} data where {kind.content_type_prefix} was expected"
+            )
         received_size = partial.stat().st_size
         if expected_size and expected_size.isdecimal() and received_size != int(expected_size):
             raise DownloadError(f"{url} stopped after {received_size} of {expected_size} bytes")
@@ -192,13 +240,26 @@ def parse_retry_after(value: str | None) -> float | None:
     return seconds if seconds >= 0 else None
 
 
-def detected_suffix(path: Path) -> str | None:
-    """Return the extension matching the file's magic bytes, if it is an image we know."""
-    with path.open("rb") as handle:
-        head = handle.read(16)
+def suffix_from_head(head: bytes) -> str | None:
+    """Return the extension matching the first bytes of a file, if it is a format we know."""
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return ".webp"
+    if head[4:8] == b"ftyp":
+        brand = head[8:12]
+        if brand in _IMAGE_BRANDS:
+            return ".avif"
+        if brand in _HEIF_BRANDS:
+            return ".heic"
+        return ".mp4"
+    if head.startswith(b"\x1aE\xdf\xa3"):
+        return ".webm"
     for magic, suffix in _MAGIC_SUFFIXES:
         if head.startswith(magic):
             return suffix
     return None
+
+
+def detected_suffix(path: Path) -> str | None:
+    """Return the extension matching the file's magic bytes, if it is a format we know."""
+    with path.open("rb") as handle:
+        return suffix_from_head(handle.read(16))

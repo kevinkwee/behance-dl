@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from behance_dl.client import IMAGE, MediaKind
 from behance_dl.models import GalleryProject
 
 CDN = "https://mir-s3-cdn-cf.behance.net/project_modules"
@@ -66,9 +67,15 @@ class FakeOpener:
 class FakeClient:
     """Stand-in for BehanceClient that serves prepared bodies instead of HTTP."""
 
-    def __init__(self, pages: dict[int, str] | None = None, images: dict[str, bytes] | None = None):
+    def __init__(
+        self,
+        pages: dict[int, str] | None = None,
+        images: dict[str, bytes] | None = None,
+        texts: dict[str, str] | None = None,
+    ):
         self._pages = pages or {}
-        self._images = images or {}
+        self._images = {url.split("?")[0]: body for url, body in (images or {}).items()}
+        self._texts = texts or {}
         self.requested: list[str] = []
 
     def get_text(self, url: str) -> str:
@@ -76,16 +83,32 @@ class FakeClient:
         for gallery_id, page in self._pages.items():
             if f"/gallery/{gallery_id}/" in url:
                 return page
-        raise AssertionError(f"unexpected page request: {url}")
+        for marker, text in self._texts.items():
+            if marker in url:
+                return text
+        raise AssertionError(f"unexpected text request: {url}")
 
-    def download(self, url: str, destination: Path) -> Path:
-        self.requested.append(url)
+    def download(self, url: str, destination: Path, *, kind: MediaKind = IMAGE) -> Path:
+        """Mirror the real client: 404 for missing media, and the same kind checks."""
+        import urllib.error
+
+        from behance_dl.client import suffix_from_head
         from behance_dl.errors import DownloadError
 
-        if url not in self._images:
-            raise DownloadError(f"{url} unavailable")
+        self.requested.append(url)
+        body = self._images.get(url.split("?")[0])
+        if body is None:
+            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+        suffix = suffix_from_head(body[:16])
+        if suffix is None:
+            raise DownloadError(f"{url} did not return a recognised file format")
+        if suffix not in kind.suffixes:
+            raise DownloadError(
+                f"{url} returned {suffix} data where {kind.content_type_prefix} was expected"
+            )
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(self._images[url])
+        destination = destination.with_suffix(suffix)
+        destination.write_bytes(body)
         return destination
 
 

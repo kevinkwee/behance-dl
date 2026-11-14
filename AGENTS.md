@@ -6,7 +6,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 `behance-dl` is a command line downloader for public Behance project galleries, published to PyPI as `behance-dl` with the import package `behance_dl`.
 
-It reads the project payload Behance inlines in a gallery page (`beconfig-store_state`), chooses one CDN variant per image, and downloads the files concurrently with resume support. It keeps gallery order, records which variant produced each file in `manifest.json`, and records prototypes and video modules as links in `embeds.json`.
+It reads the project payload Behance inlines in a gallery page (`beconfig-store_state`), chooses one CDN variant per image, and downloads the files concurrently with resume support. With `--videos` it also resolves Behance video modules to direct MP4 renditions, and hands external embeds to the optional yt-dlp extra. It keeps gallery order, records which variant produced each file in `manifest.json`, and records prototypes and video modules as links in `embeds.json`.
 
 Technology stack: Python 3.9 or newer, standard library only at runtime, Hatchling for the build, pytest for tests, Ruff for lint and format, GitHub Actions for CI and publishing.
 
@@ -17,12 +17,14 @@ Key behaviours that must not regress:
 - Variant ranking prefers `source`, then a plain bucket, then an `_opt_` copy, and drops `_still` buckets whenever an animated variant exists. A still bucket holds only the first frame of an animated image.
 - Only `https` URLs on `behance.net` or a `.behance.net` subdomain may be requested. The page payload is untrusted input.
 - The CDN sometimes serves JPEG bytes under a `.png` name, so the saved extension comes from the file's magic bytes.
+- Behance video is an Adobe Creative Cloud player iframe with no media in the embed itself. The player page lists the stream sources, and each MP4 rendition is directly fetchable with the signed token from the master playlist.
 
 ## Prerequisites
 
 - Python 3.9 or newer. The floor exists because `ThreadPoolExecutor.shutdown(cancel_futures=True)` requires 3.9.
 - `pip` and `venv` from the same interpreter.
 - No external services, credentials, or API keys. Behance is accessed anonymously.
+- Optional: `pip install -e ".[video]"` adds yt-dlp so external video hosts can be downloaded.
 - Windows is the primary development platform, and CI also runs Linux and macOS.
 
 ## Core Philosophy
@@ -121,6 +123,7 @@ Keep `from __future__ import annotations` at the top of every module.
 
 - One job per function. No boolean parameter that switches behaviour.
 - Pass a callback rather than a flag when the caller needs to react to per-item results, as `download_images` does with `on_saved`.
+- Put a policy in the caller. `download_videos` takes a `reuse` lookup rather than a `force` flag, so the CLI owns whether existing files are trusted.
 
 ### Performance
 
@@ -141,12 +144,13 @@ Keep `from __future__ import annotations` at the top of every module.
 
 | Module | Responsibility |
 |--------|----------------|
-| `client.py` | HTTP session, cookie challenge, retries, atomic image transfers. |
+| `client.py` | HTTP session, cookie challenge, retries, atomic media transfers. |
 | `gallery.py` | Behance host and URL rules, gallery id parsing, payload parsing, module walking. |
 | `selection.py` | Bucket ranking, variant selection, building a `GalleryPlan`. |
 | `storage.py` | Manifest reading and writing, parallel downloads, metadata files. |
 | `models.py` | Frozen dataclasses shared across modules. |
 | `naming.py` | File-name safety rules. |
+| `video.py` | Adobe player resolution, rendition selection, external video downloads. |
 | `errors.py` | `BehanceError`, `GalleryError`, `DownloadError`. |
 | `cli.py` | Argument parsing, reporting, exit codes. |
 
@@ -158,7 +162,7 @@ Keep `from __future__ import annotations` at the top of every module.
 
 ### Layer Rules
 
-- Network access happens only in `client.py`.
+- Network access happens only in `client.py`. `video.py` resolves URLs and then calls that client, and yt-dlp is the one deliberate exception because the external extra owns its own transfers.
 - Filesystem writes happen only in `storage.py`.
 - Selection works on plain payload dictionaries and never performs IO.
 - Errors cross module boundaries as `BehanceError` subclasses, and `cli.main` is the single place that converts them to exit codes.
@@ -171,7 +175,7 @@ Keep `from __future__ import annotations` at the top of every module.
 
 ### Dependency Direction
 
-`cli` depends on `selection` and `storage`. `selection` depends on `gallery` and `models`. `storage` depends on `client` and `models`. `gallery` depends on `client` and `models`. `models` and `naming` depend on nothing local. No module imports `cli`, and no cycles are allowed.
+`cli` depends on `selection`, `storage`, and `video`. `selection` depends on `gallery` and `models`. `storage` depends on `client` and `models`. `gallery` depends on `client` and `models`. `video` depends on `client`, `models`, `errors`, `naming`, and `storage`. `models` and `naming` depend on nothing local. No module imports `cli`, and no cycles are allowed.
 
 ## File Structure
 
@@ -211,16 +215,18 @@ Keep `from __future__ import annotations` at the top of every module.
 
 - Deny by default. The URL allowlist admits only `https` on Behance hosts, and anything else is dropped rather than fetched.
 - Fail closed. An unparseable or unexpected payload raises `GalleryError` and produces no files.
+- Refuse a redirect that leaves https or changes host. `client.SameHostRedirects` enforces that rule, so the allowlists still describe where a request can end up.
 - Keep the surface minimal. The tool sends one request per page, one per image, and writes only inside the gallery folder.
 - Threat-model the page payload whenever parsing changes. An attacker controls every value in it, including image URLs, module types, and file names.
 
 ### Input Validation and Injection
 
 - Treat every value in the page payload as untrusted.
-- Only `https` URLs on `behance.net` or a `.behance.net` subdomain may be requested. Enforce it in `gallery.is_behance_url` and never bypass it.
+- Fetch an embed link only when `--videos` was passed, and only through the matching allowlist.
+- Two purpose-scoped allowlists exist. Images may come only from `https` URLs on `behance.net` or a `.behance.net` subdomain, enforced in `gallery.is_behance_url`. Video may come only from `https://www-ccv.adobe.io` player pages and `https://cdn-prod-ccv.adobe.com` media, enforced in `video.is_ccv_player_url` and `video.is_ccv_media_url`. Never widen one to cover the other.
 - Never build a file path from raw remote text. Pass names through `naming.safe_name`, and validate recorded names with `naming.is_plain_file_name`.
 - A recorded path must stay inside the gallery folder and share the planned stem.
-- Reject a response whose content type is not `image/*`, or whose bytes match no known image magic.
+- Check the content type and the magic bytes against the requested media kind. An image download rejects MP4, AVIF, and HEIC bytes, and a video download rejects PNG and HTML bytes. A mismatch leaves no file and no `.part` behind.
 
 ### Secrets Management
 
@@ -229,7 +235,7 @@ Keep `from __future__ import annotations` at the top of every module.
 
 ### Dependencies and Supply Chain
 
-- Runtime dependencies stay at zero.
+- Runtime dependencies stay at zero. The only optional dependency is `yt-dlp`, isolated in the `video` extra, and it must never become a hard requirement.
 - Development dependencies are pinned by floor in `pyproject.toml` and resolved in CI.
 - Do not add a dependency with a known vulnerability that affects this code.
 
@@ -280,7 +286,7 @@ On Linux or macOS, activate with `source .venv/bin/activate` and call the tools 
 
 ### Test File Rules
 
-- One file per module under test: `test_client.py`, `test_gallery.py`, `test_selection.py`, `test_storage.py`, `test_naming.py`, `test_cli.py`.
+- One file per module under test: `test_client.py`, `test_gallery.py`, `test_selection.py`, `test_storage.py`, `test_video.py`, `test_naming.py`, `test_cli.py`.
 - Shared doubles and payload builders live in `tests/conftest.py`, and test-local helpers stay in the test module that uses them.
 
 ### Coverage
@@ -348,7 +354,8 @@ On Linux or macOS, activate with `source .venv/bin/activate` and call the tools 
 2. **Untrusted payload.** Every value in it is attacker-controlled. Ranking reads only allowlisted URLs, and every file name passes through `naming.safe_name`.
 3. **Variant identity.** A CDN file name repeats across buckets, so the URL is the identity. `manifest.json` records the URL per saved file, which is why a width change refetches.
 4. **Atomic writes.** An image lands in a `.part` file, is checked for content type, magic bytes, and length, then renamed into place. The record is written after each image, so an interrupt stays truthful.
-5. **Exit codes.** `cli.main` maps a failure to `0`, `1`, `2`, or `130` and is the only place that does.
+5. **Video is a player, not a file.** A video module is an Adobe CCV iframe that carries no media. Resolving it means fetching the player page, reading the master playlist for the rendition heights, then fetching `<asset>_<height>.mp4` with the playlist token. That token expires, so it is never resume identity. A re-run reuses an existing `<position>_<asset>_*.mp4` without touching the network, unless the caller chose not to or the file is taller than the requested cap.
+6. **Exit codes.** `cli.main` maps a failure to `0`, `1`, `2`, or `130` and is the only place that does.
 
 ## Rule of Thumb
 
