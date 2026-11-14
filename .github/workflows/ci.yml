@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-latest (26.04) no longer ships a Python 3.9 build, so the Linux jobs
+        # use 22.04 where every supported interpreter is available.
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install the package and its test tools
+        run: python -m pip install -e ".[dev]"
+      - name: Run the tests
+        run: python -m pytest --cov=behance_dl --cov-report=term-missing
+
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the package and its test tools
+        run: python -m pip install -e ".[dev]"
+      - name: Check lint rules
+        run: ruff check .
+      - name: Check formatting
+        run: ruff format --check .
+      - name: Check that the package builds
+        run: python -m build

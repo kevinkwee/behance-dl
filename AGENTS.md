@@ -1,0 +1,245 @@
+# AGENTS.md
+
+This file provides guidance to AI coding agents when working with code in this repository.
+
+## Project Overview
+
+`behance-dl` is a command line downloader for public Behance project galleries, published to PyPI as `behance-dl` with the import package `behance_dl`.
+
+It reads the project payload Behance inlines in a gallery page (`beconfig-store_state`), chooses one CDN variant per image, and downloads the files concurrently with resume support. It keeps gallery order, records which variant produced each file in `manifest.json`, and records prototypes and video modules as links in `embeds.json`.
+
+Technology stack: Python 3.9 or newer, standard library only at runtime, Hatchling for the build, pytest for tests, Ruff for lint and format, GitHub Actions for CI and publishing.
+
+Key behaviours that must not regress:
+
+- Gallery pages answer 404 for `/gallery/{id}` with no slug, so requests use `/gallery/{id}/gallery`.
+- Behance answers 403 with a cookie challenge. The client sets `js_challenge_value` and retries once with a fresh `Request`, because a reused request keeps the stale `Cookie` header.
+- Variant ranking prefers `source`, then a plain bucket, then an `_opt_` copy, and drops `_still` buckets whenever an animated variant exists. A still bucket holds only the first frame of an animated image.
+- Only `https` URLs on `behance.net` or a `.behance.net` subdomain may be requested. The page payload is untrusted input.
+- The CDN sometimes serves JPEG bytes under a `.png` name, so the saved extension comes from the file's magic bytes.
+
+## Prerequisites
+
+- Python 3.9 or newer. The floor exists because `ThreadPoolExecutor.shutdown(cancel_futures=True)` requires 3.9.
+- `pip` and `venv` from the same interpreter.
+- No external services, credentials, or API keys. Behance is accessed anonymously.
+- Windows is the primary development platform, and CI also runs Linux and macOS.
+
+## Core Philosophy
+
+### Trade-off Priority (when conflicts arise)
+
+1. **Correctness**: the download matches the gallery and the record stays truthful.
+2. **Simplicity and readability**: one small function per job, standard library first.
+3. **Testability**: network access sits behind `BehanceClient`, so tests use fakes.
+4. **Performance**: parallel downloads and streaming transfers, without speculative optimisation.
+5. **Abstraction and reuse**: extract only when duplication is already costing more than a shared helper.
+
+### Ground Rules
+
+- Read and understand the existing module before changing it, and preserve the behaviours listed in Project Overview.
+- If a requirement is ambiguous, ask before writing code.
+- Do not overengineer. Build for today's requirements.
+- A change to `BehanceClient`, the payload parsing, or the manifest format affects every command, so verify the touched paths end to end.
+
+## Design Principles
+
+### SOLID
+
+| Principle | Rule | Common Mistake |
+|-----------|------|----------------|
+| **SRP** (Single Responsibility) | Each module has one axis of change. `client` speaks HTTP, `gallery` parses payloads, `selection` ranks variants, `storage` writes files, `cli` parses arguments and reports. | Putting reporting inside the save step, or network calls inside selection. |
+| **OCP** (Open/Closed) | Add a new module type by extending the dispatch in `gallery.image_sources` and `gallery.embed_assets`. | Scattering module-type checks across several functions. |
+| **LSP** (Liskov Substitution) | A fake client used in tests must honour the same contract as `BehanceClient`. | A fake that returns bodies the real client would reject. |
+| **ISP** (Interface Segregation) | Fakes implement only `get_text` and `download`, which is all the planning and saving code uses. | A test double exposing unrelated helpers. |
+| **DIP** (Dependency Inversion) | `plan_gallery` and `save_gallery` accept a client object rather than constructing one. | Constructing `BehanceClient` deep inside planning code. |
+
+### DRY, KISS, YAGNI
+
+- One rule lives in one place. The Behance host rule lives in `gallery.is_behance_host`, and the file-name rule lives in `naming.safe_name`.
+- Prefer duplication over a wrong abstraction. Two similar-looking expressions with different purposes stay separate.
+- Standard library before any dependency. Runtime dependencies stay at zero unless a feature genuinely needs one.
+- No speculative options, flags, or abstractions.
+
+## Language and Runtime Constraints
+
+The package supports Python 3.9, so these are unavailable at runtime:
+
+- `match`/`case` and PEP 604 unions in evaluated positions (3.10+).
+- Builtin generics in evaluated positions, such as `list[int]` (3.9+). Every module uses `from __future__ import annotations`, so annotations may use them, but runtime expressions may not.
+- `datetime.UTC`, `itertools.batched`, and `tomllib` (3.11+).
+- Exception groups (3.11+).
+
+Keep `from __future__ import annotations` at the top of every module.
+
+## Code Quality
+
+### Linting and Formatting
+
+- Ruff handles both linting and formatting, configured in `pyproject.toml` at line length 100.
+- After changing files, run `ruff check .` and `ruff format .`. Both must pass before a change is complete.
+- Fix a violation before configuring or suppressing it. Use a per-line `noqa` only for a genuine false positive, and never a blanket suppression.
+- `tests/conftest.py` is the shared test double module, registered as first-party for import sorting.
+
+### Naming
+
+- Functions start with a verb, classes are nouns, and booleans read as a yes/no question.
+- No generic names such as `data`, `result`, `obj`, `thing`, `temp`, or `utils`.
+- No abbreviations beyond universally understood ones. `url` inside a tuple unpacking may stay lowercase when it names the element, and prose uses `URL`.
+- One concept keeps one name across modules. A saved image is a `SavedImage` in the record, an `ImageAsset` when planned, and a `StoredImage` when written.
+
+### Strong Typing
+
+- Annotate every public function's parameters and return value.
+- Avoid `Any` except where a JSON payload is genuinely untyped, and narrow it immediately with `isinstance` checks.
+- Do not cast to `Any` to make an error disappear.
+
+### Immutability
+
+- Dataclasses are frozen. Return new objects instead of mutating inputs.
+- Never expose a mutable internal collection. `GalleryProject.modules` is a tuple.
+
+### Early Returns and Guard Clauses
+
+- Put the happy path at the lowest nesting level and return early for the failure case.
+- Repeated numbers and strings become named constants, such as `RETRYABLE_STATUS` and `TRANSFER_BLOCK_SIZE`.
+
+### Comments and Docstrings
+
+- Write a comment only when it explains why, never what.
+- A docstring states the unit's purpose without restating its signature or parameters.
+- Comments and docstrings must make sense to a cold reader. No references to reviews, tickets, or conversations.
+- Never use em-dashes or en-dashes, and never use a hyphen as a clause separator. End the sentence or use a comma.
+
+### Functions
+
+- One job per function. No boolean parameter that switches behaviour.
+- Pass a callback rather than a flag when the caller needs to react to per-item results, as `download_images` does with `on_saved`.
+
+### Output Conventions
+
+- Progress and plans go to standard output. Warnings and errors go to standard error.
+- Exit codes: `0` success, `1` a gallery failed, `2` invalid arguments, `130` interrupted.
+- Never log or print credentials, and there are none to print.
+
+## Architecture
+
+### Module Layout
+
+| Module | Responsibility |
+|--------|----------------|
+| `client.py` | HTTP session, cookie challenge, retries, atomic image transfers. |
+| `gallery.py` | Behance host and URL rules, gallery id parsing, payload parsing, module walking. |
+| `selection.py` | Bucket ranking, variant selection, building a `GalleryPlan`. |
+| `storage.py` | Manifest reading and writing, parallel downloads, metadata files. |
+| `models.py` | Frozen dataclasses shared across modules. |
+| `naming.py` | File-name safety rules. |
+| `errors.py` | `BehanceError`, `GalleryError`, `DownloadError`. |
+| `cli.py` | Argument parsing, reporting, exit codes. |
+
+### Dependency Direction
+
+`cli` depends on `selection` and `storage`. `selection` depends on `gallery` and `models`. `storage` depends on `client` and `models`. `gallery` depends on `client` and `models`. `models` and `naming` depend on nothing local. No module imports `cli`, and no cycles are allowed.
+
+### Layer Rules
+
+- Network access happens only in `client.py`.
+- Filesystem writes happen only in `storage.py`.
+- Selection works on plain payload dictionaries and never performs IO.
+- Errors cross module boundaries as `BehanceError` subclasses, and `cli.main` is the single place that converts them to exit codes.
+
+## Error Handling
+
+- Define domain errors in `errors.py`. Do not raise bare `Exception` or `RuntimeError` directly.
+- Chain re-raises explicitly with `from error` to preserve the cause.
+- Convert untrusted payload shapes into `GalleryError` with enough context to identify the gallery.
+- A single failed image must not abort a gallery, and a single failed gallery must not abort a batch.
+- An interruption must leave the record truthful, so record each image as soon as it lands.
+- Never fail a run because cleanup or bookkeeping failed. Warn and continue.
+
+## Security
+
+### Input Validation and Injection
+
+- Treat every value in the page payload as untrusted.
+- Only `https` URLs on `behance.net` or a `.behance.net` subdomain may be requested. Enforce it in `gallery.is_behance_url` and never bypass it.
+- Never build a file path from raw remote text. Pass names through `naming.safe_name`, and validate recorded names with `naming.is_plain_file_name`.
+- A recorded path must stay inside the gallery folder and share the planned stem.
+- Reject a response whose content type is not `image/*`, or whose bytes match no known image magic.
+
+### Secrets Management
+
+- Never commit credentials, tokens, or API keys.
+- Never place a secret in a workflow file, a test fixture, or a log line.
+
+### Dependencies and Supply Chain
+
+- Runtime dependencies stay at zero.
+- Development dependencies are pinned by floor in `pyproject.toml` and resolved in CI.
+- Do not add a dependency with a known vulnerability that affects this code.
+
+## Testing
+
+> **Test code is production code.** It receives the same care, review, and quality standards.
+
+### Core Principles
+
+- Tests must never touch the network. Use the fakes in `tests/conftest.py`, or stub `_opener` on `BehanceClient`.
+- Follow Arrange-Act-Assert, with one act and one logical assertion per test.
+- Tests must be independent, deterministic, and order-agnostic.
+- Pin specific exception types in `pytest.raises`.
+- Test behaviour through public functions. Stubbing `client._opener` is the accepted exception, because the cookie jar has no other seam.
+- Cover the happy path and adversarial cases: hostile URLs, malformed payloads, unreadable manifests, truncated transfers, and locked files.
+- Add a regression test for every bug fixed.
+
+### How to Run Tests
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[dev]"
+pytest
+ruff check .
+ruff format --check .
+python -m build
+```
+
+On Linux or macOS, activate with `source .venv/bin/activate` and call the tools as `python -m pytest`, `python -m ruff`, and `python -m build`.
+
+### Test Naming
+
+- pytest collects `test_` functions. Use `test_[subject]_[aspect]` as the default, for example `test_still_bucket_dropped_when_animated_variant_exists`.
+- Use `test_[behaviour]` only when splitting into subject and aspect would be artificial.
+- Do not encode assertion types or fixture names in a test name.
+
+### Test File Rules
+
+- One file per module under test: `test_client.py`, `test_gallery.py`, `test_selection.py`, `test_storage.py`, `test_naming.py`, `test_cli.py`.
+- Shared doubles and payload builders live in `tests/conftest.py`, and test-local helpers stay in the test module that uses them.
+
+### Coverage
+
+- **Minimum acceptable: 85%**, measured with branch coverage.
+- Run `pytest --cov=behance_dl --cov-report=term-missing` and report the result for the touched modules.
+
+### All Created Tests MUST Pass
+
+- Every test you create or modify must pass, with zero failures and zero skips.
+- Never disable, skip, or delete a test to hide a failure. Fix the code first when the code is wrong.
+- When a test fails, decide whether the code or the test is wrong before editing either.
+
+### Anti-Patterns (Forbidden)
+
+- A test that asserts nothing.
+- A test that mocks the unit under test.
+- A test that depends on the order of other tests.
+- A fake that returns data the real client would reject.
+
+## Versioning
+
+- The version lives in `src/behance_dl/__init__.py` and Hatchling reads it from there, so bump it in one place.
+- Every release must come from a working tree with passing tests, passing lint, and no uncommitted changes.
+
+## Rule of Thumb
+
+**When in doubt: correctness over cleverness, one honest record over a silent skip, and a clear error over a wrong file on disk.**
