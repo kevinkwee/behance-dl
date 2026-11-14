@@ -102,7 +102,13 @@ Keep `from __future__ import annotations` at the top of every module.
 ### Early Returns and Guard Clauses
 
 - Put the happy path at the lowest nesting level and return early for the failure case.
-- Repeated numbers and strings become named constants, such as `RETRYABLE_STATUS` and `TRANSFER_BLOCK_SIZE`.
+- Reduce nesting by inverting a condition, not by adding another level.
+
+### No Magic Values
+
+- Extract a repeated number or string into a named module constant next to where it is used, such as `RETRYABLE_STATUS`, `TRANSFER_BLOCK_SIZE`, `MAX_BACKOFF_SECONDS`, and `MANIFEST_NAME`.
+- Name the constant after what the value means, not how it is consumed.
+- A literal that is self-evident, such as a slice offset in a format check, may stay inline.
 
 ### Comments and Docstrings
 
@@ -115,6 +121,13 @@ Keep `from __future__ import annotations` at the top of every module.
 
 - One job per function. No boolean parameter that switches behaviour.
 - Pass a callback rather than a flag when the caller needs to react to per-item results, as `download_images` does with `on_saved`.
+
+### Performance
+
+- Stream a response body straight to disk in `TRANSFER_BLOCK_SIZE` blocks. Never read a whole image into memory, because originals reach tens of megabytes.
+- Bound concurrency with `--workers`. More threads stop helping once Behance rate limits.
+- Back off on 429 and 5xx, and never retry a 4xx that will fail again.
+- Do not add caching, connection pools, or async IO without a measured need.
 
 ### Output Conventions
 
@@ -137,9 +150,11 @@ Keep `from __future__ import annotations` at the top of every module.
 | `errors.py` | `BehanceError`, `GalleryError`, `DownloadError`. |
 | `cli.py` | Argument parsing, reporting, exit codes. |
 
-### Dependency Direction
+### Separation of Concerns
 
-`cli` depends on `selection` and `storage`. `selection` depends on `gallery` and `models`. `storage` depends on `client` and `models`. `gallery` depends on `client` and `models`. `models` and `naming` depend on nothing local. No module imports `cli`, and no cycles are allowed.
+- `selection.py` works on plain payload dictionaries and stays pure, so ranking is testable without IO.
+- Side effects live at the edges. `client.py` speaks HTTP and `storage.py` touches the filesystem, and neither makes a ranking or naming decision.
+- Data crosses a boundary as a frozen dataclass from `models.py`, never as a raw response object.
 
 ### Layer Rules
 
@@ -148,16 +163,56 @@ Keep `from __future__ import annotations` at the top of every module.
 - Selection works on plain payload dictionaries and never performs IO.
 - Errors cross module boundaries as `BehanceError` subclasses, and `cli.main` is the single place that converts them to exit codes.
 
+### Dependency Injection
+
+- Pass the client into `plan_gallery` and `save_gallery` instead of building one there, so a fake replaces the network in tests.
+- Keep the composition root in `cli.main`. It is the only place that constructs a `BehanceClient`.
+- Do not inject a pure helper such as `naming.safe_name`. Call it directly.
+
+### Dependency Direction
+
+`cli` depends on `selection` and `storage`. `selection` depends on `gallery` and `models`. `storage` depends on `client` and `models`. `gallery` depends on `client` and `models`. `models` and `naming` depend on nothing local. No module imports `cli`, and no cycles are allowed.
+
+## File Structure
+
+### Avoid Over-Engineering
+
+- Split a module when it gains a second reason to change, not when it gains length. `storage.py` holds both downloads and the manifest because both answer what is on disk.
+- Keep together what changes together.
+
+### File Naming
+
+- Never create `utils.py`, `helpers.py`, `misc.py`, `common.py`, or `shared.py`.
+- Name a module after its role: `client`, `gallery`, `selection`, `storage`, `naming`, `errors`, `cli`.
+- Add a module to the Module Layout table in the same change that creates it.
+
 ## Error Handling
 
 - Define domain errors in `errors.py`. Do not raise bare `Exception` or `RuntimeError` directly.
-- Chain re-raises explicitly with `from error` to preserve the cause.
 - Convert untrusted payload shapes into `GalleryError` with enough context to identify the gallery.
 - A single failed image must not abort a gallery, and a single failed gallery must not abort a batch.
 - An interruption must leave the record truthful, so record each image as soon as it lands.
 - Never fail a run because cleanup or bookkeeping failed. Warn and continue.
 
+### Exception Chaining
+
+| Form | Use when |
+|------|----------|
+| `raise NewError(...) from error` | Translating a low-level failure into a domain error, such as a payload shape error becoming `GalleryError`. The cause stays attached. |
+| `raise NewError(...) from None` | The cause would leak an internal detail the caller cannot act on. |
+| Bare `raise` | Re-raising the same exception inside an `except` block, which is the norm for a cleanup path. |
+
+- Inside an `except` block, choose `from error` or `from None` deliberately. Implicit chaining adds a second traceback nobody reads.
+- Do not chain and also paste the cause into the message, because that prints the cause twice.
+
 ## Security
+
+### Secure by Design
+
+- Deny by default. The URL allowlist admits only `https` on Behance hosts, and anything else is dropped rather than fetched.
+- Fail closed. An unparseable or unexpected payload raises `GalleryError` and produces no files.
+- Keep the surface minimal. The tool sends one request per page, one per image, and writes only inside the gallery folder.
+- Threat-model the page payload whenever parsing changes. An attacker controls every value in it, including image URLs, module types, and file names.
 
 ### Input Validation and Injection
 
@@ -178,6 +233,12 @@ Keep `from __future__ import annotations` at the top of every module.
 - Development dependencies are pinned by floor in `pyproject.toml` and resolved in CI.
 - Do not add a dependency with a known vulnerability that affects this code.
 
+### Security Tests
+
+- Every control carries an adversarial test: a `file://` URL, a foreign host, a look-alike domain, a traversal file name, a manifest entry pointing at `project.json`, a non-image content type, and a truncated body.
+- Assert the side effect, not only the error. A rejected image must leave no file and no `.part` behind.
+- Use synthetic payloads. Never commit a real creator's project data as a fixture.
+
 ## Testing
 
 > **Test code is production code.** It receives the same care, review, and quality standards.
@@ -189,7 +250,6 @@ Keep `from __future__ import annotations` at the top of every module.
 - Tests must be independent, deterministic, and order-agnostic.
 - Pin specific exception types in `pytest.raises`.
 - Test behaviour through public functions. Stubbing `client._opener` is the accepted exception, because the cookie jar has no other seam.
-- Cover the happy path and adversarial cases: hostile URLs, malformed payloads, unreadable manifests, truncated transfers, and locked files.
 - Add a regression test for every bug fixed.
 
 ### How to Run Tests
@@ -212,6 +272,12 @@ On Linux or macOS, activate with `source .venv/bin/activate` and call the tools 
 - Use `test_[behaviour]` only when splitting into subject and aspect would be artificial.
 - Do not encode assertion types or fixture names in a test name.
 
+### Tests Must Also Challenge the Code
+
+- Happy paths first, then adversarial cases: `None`, empty strings, empty lists, wrong types, missing keys, and widths exactly at a boundary.
+- Write a test from the requirement, not from the current implementation. A test that mirrors the code finds no bugs.
+- When a test fails, decide whether the code or the test is wrong before editing either.
+
 ### Test File Rules
 
 - One file per module under test: `test_client.py`, `test_gallery.py`, `test_selection.py`, `test_storage.py`, `test_naming.py`, `test_cli.py`.
@@ -219,7 +285,7 @@ On Linux or macOS, activate with `source .venv/bin/activate` and call the tools 
 
 ### Coverage
 
-- **Minimum acceptable: 85%**, measured with branch coverage.
+- **Minimum acceptable: 85%**, measured with branch coverage. The suite measured 94% at the 0.1.0 release.
 - Run `pytest --cov=behance_dl --cov-report=term-missing` and report the result for the touched modules.
 
 ### All Created Tests MUST Pass
@@ -228,17 +294,61 @@ On Linux or macOS, activate with `source .venv/bin/activate` and call the tools 
 - Never disable, skip, or delete a test to hide a failure. Fix the code first when the code is wrong.
 - When a test fails, decide whether the code or the test is wrong before editing either.
 
+### What NOT to Test
+
+- Trivial properties that only return a stored field.
+- Implementation detail such as call order, private helpers, or the exact text of a log line.
+- Coverage padding with assertions that cannot fail.
+
 ### Anti-Patterns (Forbidden)
 
-- A test that asserts nothing.
-- A test that mocks the unit under test.
-- A test that depends on the order of other tests.
-- A fake that returns data the real client would reject.
+| Pattern | Problem |
+|---------|---------|
+| **The Liar** | Passes without verifying the behaviour it claims to test |
+| **The Mirror** | Asserts exactly what the code does, so it catches no bug |
+| **The Giant** | Long setup, several acts, dozens of assertions. Split it |
+| **The Mockery** | So many doubles that the test only checks the doubles |
+| **The Inspector** | Coupled to private detail and breaks on any refactor |
+| **The Chain Gang** | Depends on execution order or shares mutable state |
+| **The Flaky** | Passes and fails with no code change |
 
 ## Versioning
 
 - The version lives in `src/behance_dl/__init__.py` and Hatchling reads it from there, so bump it in one place.
 - Every release must come from a working tree with passing tests, passing lint, and no uncommitted changes.
+
+## Code Review
+
+### Priority (blockers first)
+
+1. **Security**: untrusted URLs, paths, and payload shapes
+2. **Data integrity**: the manifest must never claim a file that is not on disk
+3. **DRY**: one rule, one place
+4. **Architecture**: layer rules and dependency direction
+5. **Code quality**: types, naming, error handling
+6. **Testing**: happy path and adversarial coverage
+7. **Documentation**: README and this file in sync with the code
+
+### Review Questions for Tests
+
+1. Are there both happy path and adversarial tests?
+2. Would these tests catch a regression if someone broke the logic?
+3. Which failure mode is still untested?
+4. If a line of ranking or download logic were deleted, would a test fail?
+
+## Documentation
+
+- Update `README.md` when user-facing behaviour, an option, or the output layout changes.
+- Update this file when a module, an invariant, or a recorded command changes.
+- Both files describe the current code. Never narrate history in them.
+
+## Key Concepts
+
+1. **One page per gallery.** `GET /gallery/{id}/gallery` returns HTML carrying the whole project in `beconfig-store_state`. Everything downstream derives from that payload.
+2. **Untrusted payload.** Every value in it is attacker-controlled. Ranking reads only allowlisted URLs, and every file name passes through `naming.safe_name`.
+3. **Variant identity.** A CDN file name repeats across buckets, so the URL is the identity. `manifest.json` records the URL per saved file, which is why a width change refetches.
+4. **Atomic writes.** An image lands in a `.part` file, is checked for content type, magic bytes, and length, then renamed into place. The record is written after each image, so an interrupt stays truthful.
+5. **Exit codes.** `cli.main` maps a failure to `0`, `1`, `2`, or `130` and is the only place that does.
 
 ## Rule of Thumb
 
