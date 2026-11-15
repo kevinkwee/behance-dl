@@ -56,12 +56,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build the notes from the changelog
         run: python .github/scripts/release_notes.py "$GITHUB_REF_NAME" > release-notes.md
+      - name: Fetch the published files
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -s release-notes.md ]; then
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag dist/*
           else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag dist/*
           fi
