@@ -7,6 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Development and CI now use uv, with dependencies pinned in `uv.lock`. The dev dependencies moved from the `dev` extra to a `dev` dependency group, so `pip install -e ".[dev]"` no longer installs the test and lint tools.
+
 ## [0.2.0] - 2026-11-15
 
 ### Added

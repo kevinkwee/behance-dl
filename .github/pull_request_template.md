@@ -37,7 +37,7 @@ The checklist below covers what this repository enforces. Delete it if the chang
 does not touch code.
 -->
 
-- [ ] `pytest` passes
-- [ ] `ruff check .` and `ruff format --check .` pass
+- [ ] `uv run pytest` passes
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass
 - [ ] `CHANGELOG.md` has an entry under `[Unreleased]` for a user-facing change
 - [ ] `README.md` and `AGENTS.md` match the code where behaviour or architecture changed

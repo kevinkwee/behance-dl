@@ -136,12 +136,15 @@ This is opt-in because it contacts a second set of hosts beyond Behance:
 
 ## Development
 
+Requires [uv](https://docs.astral.sh/uv/). Run `uv sync` to install the locked development
+environment.
+
 ```console
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-pip install -e ".[dev]"
-pytest
-ruff check .
+uv sync
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv build
 ```
 
 ## Changelog

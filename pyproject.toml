@@ -30,7 +30,6 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
 video = ["yt-dlp>=2025.1.1"]
 
 [project.scripts]
@@ -42,6 +41,9 @@ Repository = "https://github.com/kevinkwee/behance-dl"
 Issues = "https://github.com/kevinkwee/behance-dl/issues"
 Changelog = "https://github.com/kevinkwee/behance-dl/blob/main/CHANGELOG.md"
 Releases = "https://github.com/kevinkwee/behance-dl/releases"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
 
 [tool.hatch.version]
 path = "src/behance_dl/__init__.py"

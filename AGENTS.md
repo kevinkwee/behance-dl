@@ -8,7 +8,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 It reads the project payload Behance inlines in a gallery page (`beconfig-store_state`), chooses one CDN variant per image, and downloads the files concurrently with resume support. With `--videos` it also resolves Behance video modules to direct MP4 renditions, and hands external embeds to the optional yt-dlp extra. It keeps gallery order, records which variant produced each file in `manifest.json`, and records prototypes and video modules as links in `embeds.json`.
 
-Technology stack: Python 3.9 or newer, standard library only at runtime, Hatchling for the build, pytest for tests, Ruff for lint and format, GitHub Actions for CI and publishing.
+Technology stack: Python 3.9 or newer, standard library only at runtime, Hatchling as the PEP 517 backend, invoked by `uv build`, pytest for tests, Ruff for lint and format, GitHub Actions for CI and publishing.
 
 Key behaviours that must not regress:
 
@@ -22,9 +22,9 @@ Key behaviours that must not regress:
 ## Prerequisites
 
 - Python 3.9 or newer. The floor exists because `ThreadPoolExecutor.shutdown(cancel_futures=True)` requires 3.9.
-- `pip` and `venv` from the same interpreter.
+- `uv`, which provides the environment, the lockfile, and the build command.
 - No external services, credentials, or API keys. Behance is accessed anonymously.
-- Optional: `pip install -e ".[video]"` adds yt-dlp so external video hosts can be downloaded.
+- Optional: `uv sync --extra video` adds yt-dlp so external video hosts can be downloaded. A later plain `uv sync` removes it again.
 - Windows is the primary development platform, and CI also runs Linux and macOS.
 
 ## Core Philosophy
@@ -79,7 +79,7 @@ Keep `from __future__ import annotations` at the top of every module.
 ### Linting and Formatting
 
 - Ruff handles both linting and formatting, configured in `pyproject.toml` at line length 100.
-- After changing files, run `ruff check .` and `ruff format .`. Both must pass before a change is complete.
+- After changing files, run `uv run ruff check .` and `uv run ruff format .`. Both must pass before a change is complete.
 - Fix a violation before configuring or suppressing it. Use a per-line `noqa` only for a genuine false positive, and never a blanket suppression.
 - `tests/conftest.py` is the shared test double module, registered as first-party for import sorting.
 
@@ -236,7 +236,7 @@ Keep `from __future__ import annotations` at the top of every module.
 ### Dependencies and Supply Chain
 
 - Runtime dependencies stay at zero. The only optional dependency is `yt-dlp`, isolated in the `video` extra, and it must never become a hard requirement.
-- Development dependencies are pinned by floor in `pyproject.toml` and resolved in CI.
+- Development dependencies live in the `dev` dependency group and are pinned in `uv.lock`. CI installs them with `uv sync --locked`.
 - Do not add a dependency with a known vulnerability that affects this code.
 
 ### Security Tests
@@ -261,16 +261,12 @@ Keep `from __future__ import annotations` at the top of every module.
 ### How to Run Tests
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e ".[dev]"
-pytest
-ruff check .
-ruff format --check .
-python -m build
+uv sync
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv build
 ```
-
-On Linux or macOS, activate with `source .venv/bin/activate` and call the tools as `python -m pytest`, `python -m ruff`, and `python -m build`.
 
 ### Test Naming
 
@@ -292,7 +288,7 @@ On Linux or macOS, activate with `source .venv/bin/activate` and call the tools 
 ### Coverage
 
 - **Minimum acceptable: 85%**, measured with branch coverage. The suite measured 94% at the 0.1.0 release.
-- Run `pytest --cov=behance_dl --cov-report=term-missing` and report the result for the touched modules.
+- Run `uv run pytest --cov=behance_dl --cov-report=term-missing` and report the result for the touched modules.
 
 ### All Created Tests MUST Pass
 
