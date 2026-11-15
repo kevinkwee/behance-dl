@@ -2,29 +2,42 @@
 
 ## Summary
 
-<!-- What changes and why, in a sentence or two a reviewer can act on. -->
+<!-- Briefly describe the purpose of this PR, the issue it closes, and any relevant context. -->
 
-## Related issue
+## Type of Change
 
-<!-- Closes #123, or "none". -->
+<!-- Keep only the relevant type(s). -->
 
-## Type of change
+- New Feature
+- Bug Fix
+- Refactor
+- Documentation
+- Test
+- Other
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation
-- [ ] Packaging, CI, or tooling
-- [ ] Breaking change
+## Key Changes
 
-## Checklist
+<!-- List the main changes reviewers should know about. -->
+
+-
+-
+
+## Notes
+
+<!--
+Add breaking changes, migrations, known limitations, screenshots, dependencies,
+or anything else reviewers should know. Delete this section if unnecessary.
+-->
+
+## How This Has Been Tested
+
+<!--
+Optional. Describe automated tests or manual verification when relevant.
+The checklist below covers what this repository enforces. Delete it if the change
+does not touch code.
+-->
 
 - [ ] `pytest` passes
 - [ ] `ruff check .` and `ruff format --check .` pass
-- [ ] A new or changed behaviour comes with a test that fails without the change
 - [ ] `CHANGELOG.md` has an entry under `[Unreleased]` for a user-facing change
 - [ ] `README.md` and `AGENTS.md` match the code where behaviour or architecture changed
-- [ ] No new host, file name, or redirect path bypasses the URL allowlists
-
-## Reviewer notes
-
-<!-- Trade-offs, follow-ups, or the parts you want checked closely. -->
