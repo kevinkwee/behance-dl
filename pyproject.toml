@@ -40,6 +40,7 @@ behance-dl = "behance_dl.cli:main"
 Homepage = "https://github.com/kevinkwee/behance-dl"
 Repository = "https://github.com/kevinkwee/behance-dl"
 Issues = "https://github.com/kevinkwee/behance-dl/issues"
+Changelog = "https://github.com/kevinkwee/behance-dl/blob/main/CHANGELOG.md"
 Releases = "https://github.com/kevinkwee/behance-dl/releases"
 
 [tool.hatch.version]

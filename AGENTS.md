@@ -346,6 +346,7 @@ On Linux or macOS, activate with `source .venv/bin/activate` and call the tools 
 
 - Update `README.md` when user-facing behaviour, an option, or the output layout changes.
 - Update this file when a module, an invariant, or a recorded command changes.
+- Record every user-facing change under `CHANGELOG.md` -> `## [Unreleased]`, and never rewrite a released section.
 - Both files describe the current code. Never narrate history in them.
 
 ## Key Concepts

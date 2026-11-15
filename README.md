@@ -144,6 +144,11 @@ pytest
 ruff check .
 ```
 
+## Changelog
+
+Release notes live in [CHANGELOG.md](CHANGELOG.md), and every tagged version has a
+[GitHub release](https://github.com/kevinkwee/behance-dl/releases).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
