@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
 ### Added
 
 - A Markdown transcript in every gallery folder, named after the folder itself: a folder such as `123456789_Sample-Gallery/` holds `123456789_Sample-Gallery.md`. It renders the page in page order with every image, the caption that belongs to it, every text block, and embed links, so the words that explain a slide are no longer lost. Images the page shows side by side stay on one line.
@@ -57,6 +59,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Parallel downloads, retries with backoff, atomic writes, and content type plus magic byte validation.
 - The `behance-dl` console command and `python -m behance_dl`.
 
-[Unreleased]: https://github.com/kevinkwee/behance-dl/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kevinkwee/behance-dl/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kevinkwee/behance-dl/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kevinkwee/behance-dl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kevinkwee/behance-dl/releases/tag/v0.1.0
