@@ -1,4 +1,4 @@
-"""Rendering a project page as a Markdown transcript that keeps its captions."""
+"""Rendering a project page as a Markdown transcript."""
 
 from __future__ import annotations
 
@@ -8,9 +8,7 @@ from collections.abc import Mapping
 from html.parser import HTMLParser
 from operator import itemgetter
 
-from .models import EmbedAsset, GalleryPlan, ImageAsset
-
-CAPTIONS_NAME = "captions.md"
+from .models import EmbedAsset, GalleryPlan, GalleryProject, ImageAsset
 
 _BLOCK_TAGS = frozenset({"div", "p", "li"})
 _LINK_SCHEMES = frozenset({"http", "https"})
@@ -48,7 +46,7 @@ def safe_link_target(url: str) -> str | None:
             return None
         return urllib.parse.quote(candidate, safe=_SAFE_LINK_CHARACTERS)
     except ValueError:
-        # An address a URL parser rejects is not a link, whatever the caption wanted.
+        # An address a URL parser rejects is not a link, whatever the author intended.
         return None
 
 
@@ -88,7 +86,7 @@ class MarkdownWriter(HTMLParser):
             self._parts.append(escape_markdown(data))
 
     def render(self) -> str:
-        """Return the rendered Markdown with runs of blank lines collapsed."""
+        """Return the Markdown gathered from the fed markup, with runs of blank lines collapsed."""
         self._flush_link()
         lines = [line.strip() for line in "".join(self._parts).split("\n")]
         text = _BLANK_RUNS.sub("\n\n", "\n".join(lines)).strip()
@@ -105,7 +103,7 @@ class MarkdownWriter(HTMLParser):
         if raw.strip():
             self._flush_link()
         elif raw:
-            # Keep only the single space a link spreads across a block, so the list cannot grow.
+            # Keep only the single space a link spreads across a block, so the label cannot grow.
             self._label = [raw[:1]]
         if self._parts and not self._parts[-1].endswith("\n"):
             self._parts.append("\n")
@@ -162,15 +160,12 @@ def embed_markdown(embed: EmbedAsset) -> str:
     return "\n\n".join(part for part in (caption, link) if part)
 
 
-def has_captions(plan: GalleryPlan) -> bool:
-    """Report whether the page renders any author-written prose."""
-    markup = [block.markup for block in plan.texts]
-    markup.extend(asset.caption for asset in plan.images)
-    markup.extend(embed.caption for embed in plan.embeds)
-    return any(markdown_text(text) for text in markup)
+def transcript_name(project: GalleryProject) -> str:
+    """Return the transcript's file name, whose stem is the project's gallery folder name."""
+    return f"{project.folder_name}.md"
 
 
-def render_captions(plan: GalleryPlan, saved_names: Mapping[str, str]) -> str:
+def render_transcript(plan: GalleryPlan, saved_names: Mapping[str, str]) -> str:
     """Render the page as Markdown in page order, linking every image under its saved name."""
     entries: list[tuple[int, str]] = [
         (asset.position, image_markdown(asset, saved_names)) for asset in plan.images

@@ -1,4 +1,4 @@
-"""Tests for rendering a page transcript with its captions."""
+"""Tests for rendering a page as a Markdown transcript."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from behance_dl.captions import (
-    MarkdownWriter,
-    has_captions,
-    markdown_text,
-    render_captions,
-)
 from behance_dl.models import EmbedAsset, GalleryPlan, GalleryProject, ImageAsset, TextBlock
+from behance_dl.transcript import (
+    MarkdownWriter,
+    markdown_text,
+    render_transcript,
+    transcript_name,
+)
 
 IMAGE_URL = "https://mir-s3-cdn-cf.behance.net/project_modules/source/abc.png"
 
@@ -23,8 +23,9 @@ def make_plan(
     embeds: tuple[EmbedAsset, ...] = (),
     texts: tuple[TextBlock, ...] = (),
     name: str = "Example",
+    slug: str = "Example",
 ) -> GalleryPlan:
-    project = GalleryProject(id=42, name=name, slug="Example", modules=(), payload={"id": 42})
+    project = GalleryProject(id=42, name=name, slug=slug, modules=(), payload={"id": 42})
     return GalleryPlan(
         project=project,
         images=images,
@@ -257,7 +258,7 @@ def test_image_asset_position_is_read_from_the_file_prefix() -> None:
     assert asset.position == 5
 
 
-def test_render_captions_places_text_between_its_neighbouring_images() -> None:
+def test_render_transcript_places_text_between_its_neighbouring_images() -> None:
     plan = make_plan(
         images=(
             ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),
@@ -266,14 +267,14 @@ def test_render_captions_places_text_between_its_neighbouring_images() -> None:
         texts=(TextBlock(position=2, markup="<div>Between</div>"),),
     )
 
-    document = render_captions(plan, {})
+    document = render_transcript(plan, {})
 
     assert document == (
         "# Example\n\n![001_abc.png](001_abc.png)\n\nBetween\n\n![003_abc.png](003_abc.png)\n"
     )
 
 
-def test_render_captions_keeps_collection_components_in_page_order() -> None:
+def test_render_transcript_keeps_collection_components_in_page_order() -> None:
     prefixes = ["005_09", "005_99", "005_100", "005_101"]
     plan = make_plan(
         images=tuple(
@@ -282,149 +283,131 @@ def test_render_captions_keeps_collection_components_in_page_order() -> None:
         texts=(TextBlock(position=6, markup="After"),),
     )
 
-    document = render_captions(plan, {})
+    document = render_transcript(plan, {})
 
     positions = [document.index(prefix) for prefix in prefixes]
     assert positions == sorted(positions)
 
 
-def test_render_captions_renders_an_embed_caption_above_its_link() -> None:
+def test_render_transcript_renders_an_embed_caption_above_its_link() -> None:
     plan = make_plan(embeds=(embed(1, "Prototype", "https://embed.figma.com/x"),))
 
-    assert render_captions(plan, {}) == (
+    assert render_transcript(plan, {}) == (
         "# Example\n\nPrototype\n\n[https://embed.figma.com/x](https://embed.figma.com/x)\n"
     )
 
 
-def test_render_captions_labels_an_embed_without_a_caption_by_its_url() -> None:
+def test_render_transcript_labels_an_embed_without_a_caption_by_its_url() -> None:
     plan = make_plan(embeds=(embed(1, "", "https://v.test/1"),))
 
-    assert render_captions(plan, {}) == "# Example\n\n[https://v.test/1](https://v.test/1)\n"
+    assert render_transcript(plan, {}) == "# Example\n\n[https://v.test/1](https://v.test/1)\n"
 
 
-def test_render_captions_links_the_name_the_file_was_saved_under() -> None:
+def test_render_transcript_links_the_name_the_file_was_saved_under() -> None:
     plan = make_plan(
         images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
         texts=(TextBlock(position=2, markup="After"),),
     )
 
-    document = render_captions(plan, {"001_abc.png": "001_abc.jpg"})
+    document = render_transcript(plan, {"001_abc.png": "001_abc.jpg"})
 
     assert "![001_abc.png](001_abc.jpg)" in document
 
 
-def test_render_captions_renders_an_image_caption_under_its_image() -> None:
+def test_render_transcript_renders_an_image_caption_under_its_image() -> None:
     plan = make_plan(
         images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100, caption="A boo"),)
     )
 
-    assert render_captions(plan, {}) == "# Example\n\n![001_abc.png](001_abc.png)\n\nA boo\n"
+    assert render_transcript(plan, {}) == "# Example\n\n![001_abc.png](001_abc.png)\n\nA boo\n"
 
 
-def test_render_captions_escapes_a_hostile_project_name() -> None:
+def test_render_transcript_escapes_a_hostile_project_name() -> None:
     plan = make_plan(
         images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
         name="[x](javascript:alert(1))",
     )
 
-    assert render_captions(plan, {}).startswith("# \\[x\\](javascript:alert(1))\n")
+    assert render_transcript(plan, {}).startswith("# \\[x\\](javascript:alert(1))\n")
 
 
-def test_render_captions_keeps_a_project_name_on_one_line() -> None:
+def test_render_transcript_keeps_a_project_name_on_one_line() -> None:
     plan = make_plan(
         images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
         name="One\nTwo",
     )
 
-    assert render_captions(plan, {}).startswith("# One Two\n")
+    assert render_transcript(plan, {}).startswith("# One Two\n")
 
 
-def test_render_captions_skips_a_block_that_renders_nothing() -> None:
+def test_render_transcript_skips_a_block_that_renders_nothing() -> None:
     plan = make_plan(
         images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
         texts=(TextBlock(position=2, markup="<div><br></div>"),),
     )
 
-    assert render_captions(plan, {}) == "# Example\n\n![001_abc.png](001_abc.png)\n"
+    assert render_transcript(plan, {}) == "# Example\n\n![001_abc.png](001_abc.png)\n"
 
 
-def test_render_captions_omits_an_embed_without_a_label_or_a_link() -> None:
+def test_render_transcript_omits_an_embed_without_a_label_or_a_link() -> None:
     plan = make_plan(
         images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
         embeds=(embed(2, "", ""),),
     )
 
-    assert render_captions(plan, {}) == "# Example\n\n![001_abc.png](001_abc.png)\n"
+    assert render_transcript(plan, {}) == "# Example\n\n![001_abc.png](001_abc.png)\n"
 
 
-def test_render_captions_keeps_an_embed_with_a_foreign_link_as_text() -> None:
+def test_render_transcript_keeps_an_embed_with_a_foreign_link_as_text() -> None:
     plan = make_plan(
         embeds=(embed(1, "", "javascript:alert(1)"),),
         texts=(TextBlock(position=2, markup="After"),),
     )
 
-    assert render_captions(plan, {}) == "# Example\n\njavascript:alert(1)\n\nAfter\n"
+    assert render_transcript(plan, {}) == "# Example\n\njavascript:alert(1)\n\nAfter\n"
 
 
-def test_render_captions_escapes_a_hostile_embed_link_label() -> None:
+def test_render_transcript_escapes_a_hostile_embed_link_label() -> None:
     plan = make_plan(embeds=(embed(1, "", "https://x.test/](javascript:alert(1))"),))
 
-    assert render_captions(plan, {}) == (
+    assert render_transcript(plan, {}) == (
         "# Example\n\n"
         "[https://x.test/\\](javascript:alert(1))]"
         "(https://x.test/%5D%28javascript:alert%281%29%29)\n"
     )
 
 
-def test_render_captions_escapes_an_embed_url_without_a_scheme() -> None:
+def test_render_transcript_escapes_an_embed_url_without_a_scheme() -> None:
     plan = make_plan(embeds=(embed(1, "", "[x](javascript:alert(1))"),))
 
-    assert render_captions(plan, {}) == "# Example\n\n\\[x\\](javascript:alert(1))\n"
+    assert render_transcript(plan, {}) == "# Example\n\n\\[x\\](javascript:alert(1))\n"
 
 
-def test_render_captions_renders_an_embed_with_an_unparseable_url_as_text() -> None:
+def test_render_transcript_renders_an_embed_with_an_unparseable_url_as_text() -> None:
     plan = make_plan(embeds=(embed(1, "", "https://[x"),))
 
-    assert render_captions(plan, {}) == "# Example\n\nhttps://\\[x\n"
+    assert render_transcript(plan, {}) == "# Example\n\nhttps://\\[x\n"
 
 
-def test_render_captions_escapes_a_line_start_in_a_rejected_embed_url() -> None:
+def test_render_transcript_escapes_a_line_start_in_a_rejected_embed_url() -> None:
     plan = make_plan(embeds=(embed(1, "", "- x"),))
 
-    assert render_captions(plan, {}) == "# Example\n\n\\- x\n"
+    assert render_transcript(plan, {}) == "# Example\n\n\\- x\n"
 
 
-def test_render_captions_renders_a_title_alone_when_nothing_else_shows() -> None:
+def test_render_transcript_renders_a_title_alone_when_nothing_else_shows() -> None:
     plan = make_plan(texts=(TextBlock(position=1, markup="<div><br></div>"),))
 
-    assert render_captions(plan, {}) == "# Example\n"
+    assert render_transcript(plan, {}) == "# Example\n"
 
 
-def test_has_captions_is_false_without_prose() -> None:
-    plan = make_plan(images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),))
-
-    assert has_captions(plan) is False
+def test_transcript_name_mirrors_the_project_folder_name() -> None:
+    assert transcript_name(make_plan().project) == "42_Example.md"
 
 
-def test_has_captions_is_false_for_a_spacer_block() -> None:
-    plan = make_plan(texts=(TextBlock(position=1, markup="<div><br></div>"),))
-
-    assert has_captions(plan) is False
+def test_transcript_name_falls_back_to_the_id_without_a_slug() -> None:
+    assert transcript_name(make_plan(slug="").project) == "42.md"
 
 
-def test_has_captions_is_true_for_a_text_block() -> None:
-    assert has_captions(make_plan(texts=(TextBlock(position=1, markup="Words"),))) is True
-
-
-def test_has_captions_is_true_for_an_image_caption() -> None:
-    plan = make_plan(
-        images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100, caption="A boo"),)
-    )
-
-    assert has_captions(plan) is True
-
-
-def test_has_captions_is_true_for_an_embed_caption() -> None:
-    plan = make_plan(embeds=(embed(1, "Prototype", "https://embed.figma.com/x"),))
-
-    assert has_captions(plan) is True
+def test_transcript_name_drops_a_traversal_slug() -> None:
+    assert transcript_name(make_plan(slug="../../etc").project) == "42_etc.md"

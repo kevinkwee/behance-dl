@@ -9,10 +9,10 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
 
-from .captions import CAPTIONS_NAME, has_captions, render_captions
 from .client import BehanceClient
 from .models import GalleryPlan, ImageAsset, SavedImage, StoredImage
 from .naming import is_plain_file_name
+from .transcript import render_transcript, transcript_name
 
 MANIFEST_NAME = "manifest.json"
 
@@ -84,7 +84,7 @@ def save_gallery(
         workers=workers,
         on_saved=remember,
     )
-    write_captions(destination, plan, record)
+    write_transcript(destination, plan, record)
     if failed:
         print(f"{failed} of {len(plan.images)} images failed", file=sys.stderr)
     else:
@@ -92,16 +92,15 @@ def save_gallery(
     return failed
 
 
-def write_captions(destination: Path, plan: GalleryPlan, record: dict[str, SavedImage]) -> None:
-    """Write the page transcript when there is prose, warning instead of failing on a disk error."""
-    if not has_captions(plan):
-        return
-    # The saved extension follows the bytes, so the transcript links the recorded name.
-    saved_names = {name: entry.path for name, entry in record.items()}
+def write_transcript(destination: Path, plan: GalleryPlan, record: dict[str, SavedImage]) -> None:
+    """Write the page transcript, warning instead of failing on a disk error."""
+    name = transcript_name(plan.project)
+    # The saved extension comes from magic bytes, so the transcript links the recorded name.
+    saved_names = {planned: entry.path for planned, entry in record.items()}
     try:
-        write_text(destination / CAPTIONS_NAME, render_captions(plan, saved_names))
+        write_text(destination / name, render_transcript(plan, saved_names))
     except OSError as error:
-        print(f"warning: could not write {CAPTIONS_NAME}: {error}", file=sys.stderr)
+        print(f"warning: could not write {name}: {error}", file=sys.stderr)
 
 
 def download_images(

@@ -58,7 +58,7 @@ behance-dl 123456789 234567890 345678901 -o downloads
   002_4d5e6f7123456789.5f6d7e9a1c2d3.png
   003_8a9b0c1123456789.5f6d7eab2e3f4.jpg
   005_ExampleAsset1_720.mp4    # only with --videos
-  captions.md                  # the page's words, in page order
+  123456789_Sample-Gallery.md  # the whole page in Markdown, in page order
   embeds.json                  # prototypes, and video modules as links
   manifest.json                # which CDN variant produced each saved image
   project.json                 # the full project payload Behance served
@@ -72,11 +72,12 @@ Behance's CDN sometimes serves JPEG data under a `.png` name.
 video modules, with their source URL, caption and dimensions. It is always written, so the
 original page stays reconstructable even when the media itself was downloaded.
 
-`captions.md` renders the page in page order when the project carries author-written
-prose. Every image appears with the caption that belongs to it, the text blocks stay where
+The folder's `.md` file, named after the folder itself, renders the whole page in page
+order. Every image appears with the caption that belongs to it, the text blocks stay where
 the author placed them, and embedded prototypes and videos become links. An image link
-points at the file's saved name, so a JPEG served as `.png` links to the `.jpg` on disk.
-The file is written only when there is prose to transcribe.
+points at the file's saved name, so a JPEG served as `.png` links to the `.jpg` on disk. It
+is written for every gallery, so even a project without captions leaves a readable index of
+its images.
 
 ## Re-running, resume and width changes
 

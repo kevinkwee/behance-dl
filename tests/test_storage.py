@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from behance_dl.captions import CAPTIONS_NAME
 from behance_dl.models import (
     GalleryPlan,
     GalleryProject,
@@ -24,6 +23,7 @@ from behance_dl.storage import (
     save_image,
     write_json,
 )
+from behance_dl.transcript import transcript_name
 from conftest import FakeClient
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
@@ -44,6 +44,10 @@ def make_plan(destination: Path, *urls: str, texts: tuple[TextBlock, ...] = ()) 
         expected_images=len(images),
         texts=texts,
     )
+
+
+def transcript_path(plan: GalleryPlan) -> Path:
+    return plan.destination / transcript_name(plan.project)
 
 
 def test_write_json_replaces_atomically(tmp_path: Path) -> None:
@@ -248,17 +252,27 @@ def test_save_gallery_writes_the_page_transcript(tmp_path: Path) -> None:
 
     save_gallery(client, plan, {}, workers=1)
 
-    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    document = transcript_path(plan).read_text(encoding="utf-8")
     assert document == "# P\n\n![001_a.png](001_a.png)\n\nWords\n"
 
 
-def test_save_gallery_skips_the_transcript_without_prose(tmp_path: Path) -> None:
+def test_save_gallery_writes_the_transcript_without_prose(tmp_path: Path) -> None:
     client = FakeClient(images={"https://x/a.png": PNG})
     plan = make_plan(tmp_path / "gallery", "https://x/a.png")
 
     save_gallery(client, plan, {}, workers=1)
 
-    assert not (plan.destination / CAPTIONS_NAME).exists()
+    document = transcript_path(plan).read_text(encoding="utf-8")
+    assert document == "# P\n\n![001_a.png](001_a.png)\n"
+
+
+def test_save_gallery_names_the_transcript_after_the_gallery_folder(tmp_path: Path) -> None:
+    client = FakeClient(images={"https://x/a.png": PNG})
+    plan = make_plan(tmp_path / "1_P", "https://x/a.png")
+
+    save_gallery(client, plan, {}, workers=1)
+
+    assert [path.name for path in plan.destination.glob("*.md")] == ["1_P.md"]
 
 
 def test_save_gallery_links_the_extension_the_cdn_actually_served(tmp_path: Path) -> None:
@@ -271,7 +285,7 @@ def test_save_gallery_links_the_extension_the_cdn_actually_served(tmp_path: Path
 
     save_gallery(client, plan, {}, workers=1)
 
-    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    document = transcript_path(plan).read_text(encoding="utf-8")
     assert "![001_a.png](001_a.jpg)" in document
 
 
@@ -284,7 +298,7 @@ def test_save_gallery_writes_a_transcript_carrying_a_lone_surrogate(tmp_path: Pa
     )
 
     assert save_gallery(client, plan, {}, workers=1) == 0
-    assert (plan.destination / CAPTIONS_NAME).exists()
+    assert transcript_path(plan).exists()
 
 
 def test_save_gallery_links_the_planned_name_when_the_image_fails(tmp_path: Path) -> None:
@@ -296,7 +310,7 @@ def test_save_gallery_links_the_planned_name_when_the_image_fails(tmp_path: Path
     )
 
     assert save_gallery(client, plan, {}, workers=1) == 1
-    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    document = transcript_path(plan).read_text(encoding="utf-8")
     assert "![001_a.png](001_a.png)" in document
 
 
@@ -309,7 +323,7 @@ def test_save_gallery_survives_a_caption_the_parser_refuses(tmp_path: Path) -> N
     )
 
     assert save_gallery(client, plan, {}, workers=1) == 0
-    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    document = transcript_path(plan).read_text(encoding="utf-8")
     assert "after" in document
 
 
@@ -325,11 +339,11 @@ def test_save_gallery_warns_when_the_transcript_cannot_be_written(
     original = Path.write_text
 
     def refuse(self: Path, data: str, encoding: str | None = None, **kwargs: object) -> None:
-        if self.name == CAPTIONS_NAME + ".part":
+        if self.name == transcript_path(plan).name + ".part":
             raise OSError(32, "in use")
         original(self, data, encoding=encoding or "utf-8", **kwargs)
 
     monkeypatch.setattr(Path, "write_text", refuse)
 
     assert save_gallery(client, plan, {}, workers=1) == 0
-    assert CAPTIONS_NAME in capsys.readouterr().err
+    assert transcript_path(plan).name in capsys.readouterr().err
