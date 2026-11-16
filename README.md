@@ -57,11 +57,12 @@ behance-dl 123456789 234567890 345678901 -o downloads
   001_0a1b2c3123456789.5f6d7e8f9a0b1.png
   002_4d5e6f7123456789.5f6d7e9a1c2d3.png
   003_8a9b0c1123456789.5f6d7eab2e3f4.jpg
-  005_ExampleAsset1_720.mp4    # only with --videos
-  123456789_Sample-Gallery.md  # the whole page in Markdown, in page order
-  embeds.json                  # prototypes, and video modules as links
-  manifest.json                # which CDN variant produced each saved image
-  project.json                 # the full project payload Behance served
+  005_ExampleAsset1_720.mp4      # only with --videos
+  123456789_Sample-Gallery.md    # the whole page in Markdown, in page order
+  123456789_Sample-Gallery.html  # the same page as an offline web page
+  embeds.json                    # prototypes, and video modules as links
+  manifest.json                  # which CDN variant produced each saved image
+  project.json                   # the full project payload Behance served
 ```
 
 Files are prefixed with their position in the gallery, so a plain alphabetical listing
@@ -74,10 +75,21 @@ original page stays reconstructable even when the media itself was downloaded.
 
 The folder's `.md` file, named after the folder itself, renders the whole page in page
 order. Every image appears with the caption that belongs to it, the text blocks stay where
-the author placed them, and embedded prototypes and videos become links. An image link
-points at the file's saved name, so a JPEG served as `.png` links to the `.jpg` on disk. It
-is written for every gallery, so even a project without captions leaves a readable index of
-its images.
+the author placed them, and a module that shows several images in one row becomes one line
+of images, so the slides that belong together read together. An image link points at the
+file's saved name, so a JPEG served as `.png` links to the `.jpg` on disk. It is written
+for every gallery, so even a project without captions leaves a readable index of its
+images.
+
+The `.html` file is the same page rendered as a standalone web page that opens without a
+network.
+It follows the layout the author chose on Behance: the canvas colour and the spacing
+between modules come from the page's own style, a full width slide fills the column, a
+narrower image keeps the size the author gave it, and a module that holds several images is
+a row sized by each image's proportions. Text modules keep their alignment, colours and
+sizes, and embedded prototypes and videos become links. The document carries its own
+styles and reads every image from the same folder, so it needs no fonts or scripts from
+elsewhere.
 
 ## Re-running, resume and width changes
 

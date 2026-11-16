@@ -28,22 +28,30 @@ class GalleryProject:
 
 @dataclass(frozen=True)
 class ImageAsset:
-    """One downloadable image and the CDN variant chosen for it."""
+    """One downloadable image, the CDN variant chosen for it, and the size the page shows it at."""
 
     file_prefix: str
     url: str
     width: int
     caption: str = ""
+    display_width: int = 0
+    display_height: int = 0
 
     @property
     def file_name(self) -> str:
         cdn_name = Path(urllib.parse.urlsplit(self.url).path).name
         return f"{self.file_prefix}_{safe_name(cdn_name, 'image')}"
 
-    @property
-    def position(self) -> int:
-        """Return the module position the file prefix was built from."""
-        return int(self.file_prefix.partition("_")[0])
+
+@dataclass(frozen=True)
+class Slide:
+    """One page module and the images it shows, in page order."""
+
+    position: int
+    images: tuple[ImageAsset, ...]
+    is_collection: bool = False
+    collection_caption: str = ""
+    is_full_bleed: bool = False
 
 
 @dataclass(frozen=True)
@@ -71,11 +79,23 @@ class GalleryPlan:
     """What one gallery will produce before anything is written."""
 
     project: GalleryProject
-    images: tuple[ImageAsset, ...]
+    slides: tuple[Slide, ...]
     embeds: tuple[EmbedAsset, ...]
     destination: Path
     expected_images: int
     texts: tuple[TextBlock, ...] = ()
+
+    @property
+    def images(self) -> tuple[ImageAsset, ...]:
+        """Return every planned image in the order it is downloaded."""
+        return tuple(asset for slide in self.slides for asset in slide.images)
+
+    @property
+    def entries(self) -> tuple[Slide | EmbedAsset | TextBlock, ...]:
+        """Return the page's modules in page order, slides first where positions tie."""
+        return tuple(
+            sorted((*self.slides, *self.embeds, *self.texts), key=lambda entry: entry.position)
+        )
 
 
 @dataclass(frozen=True)

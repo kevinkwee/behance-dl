@@ -12,6 +12,7 @@ from pathlib import Path
 from .client import BehanceClient
 from .models import GalleryPlan, ImageAsset, SavedImage, StoredImage
 from .naming import is_plain_file_name
+from .snapshot import render_snapshot, snapshot_name
 from .transcript import render_transcript, transcript_name
 
 MANIFEST_NAME = "manifest.json"
@@ -54,7 +55,7 @@ def save_gallery(
     *,
     workers: int,
 ) -> int:
-    """Write one gallery's records, transcript, and images, returning how many images failed."""
+    """Write one gallery's records, page renderings, and images, returning image failures."""
     destination = plan.destination
     destination.mkdir(parents=True, exist_ok=True)
     write_json(destination / "project.json", plan.project.payload)
@@ -84,7 +85,7 @@ def save_gallery(
         workers=workers,
         on_saved=remember,
     )
-    write_transcript(destination, plan, record)
+    write_pages(destination, plan, record)
     if failed:
         print(f"{failed} of {len(plan.images)} images failed", file=sys.stderr)
     else:
@@ -92,13 +93,18 @@ def save_gallery(
     return failed
 
 
-def write_transcript(destination: Path, plan: GalleryPlan, record: dict[str, SavedImage]) -> None:
-    """Write the page transcript, warning instead of failing on a disk error."""
-    name = transcript_name(plan.project)
-    # The saved extension comes from magic bytes, so the transcript links the recorded name.
+def write_pages(destination: Path, plan: GalleryPlan, record: dict[str, SavedImage]) -> None:
+    """Write the Markdown transcript and the offline HTML snapshot of the page."""
+    # The saved extension comes from magic bytes, so both pages link the recorded name.
     saved_names = {planned: entry.path for planned, entry in record.items()}
+    write_page(destination, transcript_name(plan.project), render_transcript(plan, saved_names))
+    write_page(destination, snapshot_name(plan.project), render_snapshot(plan, saved_names))
+
+
+def write_page(destination: Path, name: str, document: str) -> None:
+    """Write one page file, warning instead of failing on a disk error."""
     try:
-        write_text(destination / name, render_transcript(plan, saved_names))
+        write_text(destination / name, document)
     except OSError as error:
         print(f"warning: could not write {name}: {error}", file=sys.stderr)
 

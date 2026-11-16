@@ -83,13 +83,24 @@ def fetch_project(client: BehanceClient, gallery_id: int) -> GalleryProject:
 def image_sources(project: GalleryProject) -> Iterator[tuple[str, dict[str, Any]]]:
     """Yield the file prefix and image payload of every image in the project."""
     for position, module in enumerate(project.modules, start=1):
-        kind = module.get("__typename")
-        if kind == "ImageModule":
-            yield f"{position:03d}", module
-        elif kind == "MediaCollectionModule":
-            components = module.get("components") or []
-            for index, component in enumerate(components, start=1):
-                yield f"{position:03d}_{index:02d}", component
+        yield from module_image_sources(module, position)
+
+
+def is_collection_module(module: dict[str, Any]) -> bool:
+    """Report whether a module lays several images out as one row."""
+    return module.get("__typename") == "MediaCollectionModule"
+
+
+def module_image_sources(
+    module: dict[str, Any], position: int
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield the file prefix and image payload of every image one module shows."""
+    if module.get("__typename") == "ImageModule":
+        yield f"{position:03d}", module
+    elif is_collection_module(module):
+        components = module.get("components") or []
+        for index, component in enumerate(components, start=1):
+            yield f"{position:03d}_{index:02d}", component
 
 
 def text_blocks(project: GalleryProject) -> list[TextBlock]:

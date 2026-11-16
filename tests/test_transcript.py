@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from behance_dl.models import EmbedAsset, GalleryPlan, GalleryProject, ImageAsset, TextBlock
+from behance_dl.models import (
+    EmbedAsset,
+    GalleryPlan,
+    GalleryProject,
+    ImageAsset,
+    Slide,
+    TextBlock,
+)
 from behance_dl.transcript import (
     MarkdownWriter,
     markdown_text,
@@ -19,7 +26,7 @@ IMAGE_URL = "https://mir-s3-cdn-cf.behance.net/project_modules/source/abc.png"
 
 def make_plan(
     *,
-    images: tuple[ImageAsset, ...] = (),
+    slides: tuple[Slide, ...] = (),
     embeds: tuple[EmbedAsset, ...] = (),
     texts: tuple[TextBlock, ...] = (),
     name: str = "Example",
@@ -28,11 +35,25 @@ def make_plan(
     project = GalleryProject(id=42, name=name, slug=slug, modules=(), payload={"id": 42})
     return GalleryPlan(
         project=project,
-        images=images,
+        slides=slides,
         embeds=embeds,
         destination=Path("unused"),
-        expected_images=len(images),
+        expected_images=sum(len(item.images) for item in slides),
         texts=texts,
+    )
+
+
+def slide(
+    position: int,
+    *images: ImageAsset,
+    collection: bool = False,
+    caption: str = "",
+) -> Slide:
+    return Slide(
+        position=position,
+        images=images,
+        is_collection=collection,
+        collection_caption=caption,
     )
 
 
@@ -252,17 +273,11 @@ def test_markdown_text_escapes_a_line_start_in_the_parser_fallback(monkeypatch) 
     assert markdown_text("<div>one</div>\n- two") == "\\<div\\>one\\</div\\>\n\\- two"
 
 
-def test_image_asset_position_is_read_from_the_file_prefix() -> None:
-    asset = ImageAsset(file_prefix="005_02", url=IMAGE_URL, width=100)
-
-    assert asset.position == 5
-
-
 def test_render_transcript_places_text_between_its_neighbouring_images() -> None:
     plan = make_plan(
-        images=(
-            ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),
-            ImageAsset(file_prefix="003", url=IMAGE_URL, width=100),
+        slides=(
+            slide(1, ImageAsset(file_prefix="001", url=IMAGE_URL, width=100)),
+            slide(3, ImageAsset(file_prefix="003", url=IMAGE_URL, width=100)),
         ),
         texts=(TextBlock(position=2, markup="<div>Between</div>"),),
     )
@@ -276,10 +291,9 @@ def test_render_transcript_places_text_between_its_neighbouring_images() -> None
 
 def test_render_transcript_keeps_collection_components_in_page_order() -> None:
     prefixes = ["005_09", "005_99", "005_100", "005_101"]
+    assets = tuple(ImageAsset(file_prefix=prefix, url=IMAGE_URL, width=100) for prefix in prefixes)
     plan = make_plan(
-        images=tuple(
-            ImageAsset(file_prefix=prefix, url=IMAGE_URL, width=100) for prefix in prefixes
-        ),
+        slides=(slide(5, *assets, collection=True),),
         texts=(TextBlock(position=6, markup="After"),),
     )
 
@@ -287,6 +301,58 @@ def test_render_transcript_keeps_collection_components_in_page_order() -> None:
 
     positions = [document.index(prefix) for prefix in prefixes]
     assert positions == sorted(positions)
+
+
+def test_render_transcript_puts_collection_components_on_one_line() -> None:
+    plan = make_plan(
+        slides=(
+            slide(
+                1,
+                ImageAsset(file_prefix="001_01", url=IMAGE_URL, width=100),
+                ImageAsset(file_prefix="001_02", url=IMAGE_URL, width=100),
+                collection=True,
+            ),
+        )
+    )
+
+    document = render_transcript(plan, {})
+
+    assert "![001_01_abc.png](001_01_abc.png) ![001_02_abc.png](001_02_abc.png)\n" in document
+
+
+def test_render_transcript_renders_the_collection_caption_under_the_row() -> None:
+    plan = make_plan(
+        slides=(
+            slide(
+                1,
+                ImageAsset(file_prefix="001_01", url=IMAGE_URL, width=100),
+                collection=True,
+                caption="<div>Two boos</div>",
+            ),
+        )
+    )
+
+    assert render_transcript(plan, {}) == (
+        "# Example\n\n![001_01_abc.png](001_01_abc.png)\n\nTwo boos\n"
+    )
+
+
+def test_render_transcript_renders_a_component_caption_under_the_row() -> None:
+    plan = make_plan(
+        slides=(
+            slide(
+                1,
+                ImageAsset(file_prefix="001_01", url=IMAGE_URL, width=100),
+                ImageAsset(file_prefix="001_02", url=IMAGE_URL, width=100, caption="Left boo"),
+                collection=True,
+            ),
+        )
+    )
+
+    assert render_transcript(plan, {}) == (
+        "# Example\n\n![001_01_abc.png](001_01_abc.png) ![001_02_abc.png](001_02_abc.png)"
+        "\n\nLeft boo\n"
+    )
 
 
 def test_render_transcript_renders_an_embed_caption_above_its_link() -> None:
@@ -305,7 +371,7 @@ def test_render_transcript_labels_an_embed_without_a_caption_by_its_url() -> Non
 
 def test_render_transcript_links_the_name_the_file_was_saved_under() -> None:
     plan = make_plan(
-        images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
+        slides=(slide(1, ImageAsset(file_prefix="001", url=IMAGE_URL, width=100)),),
         texts=(TextBlock(position=2, markup="After"),),
     )
 
@@ -316,7 +382,7 @@ def test_render_transcript_links_the_name_the_file_was_saved_under() -> None:
 
 def test_render_transcript_renders_an_image_caption_under_its_image() -> None:
     plan = make_plan(
-        images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100, caption="A boo"),)
+        slides=(slide(1, ImageAsset(file_prefix="001", url=IMAGE_URL, width=100, caption="A boo")),)
     )
 
     assert render_transcript(plan, {}) == "# Example\n\n![001_abc.png](001_abc.png)\n\nA boo\n"
@@ -324,7 +390,7 @@ def test_render_transcript_renders_an_image_caption_under_its_image() -> None:
 
 def test_render_transcript_escapes_a_hostile_project_name() -> None:
     plan = make_plan(
-        images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
+        slides=(slide(1, ImageAsset(file_prefix="001", url=IMAGE_URL, width=100)),),
         name="[x](javascript:alert(1))",
     )
 
@@ -333,7 +399,7 @@ def test_render_transcript_escapes_a_hostile_project_name() -> None:
 
 def test_render_transcript_keeps_a_project_name_on_one_line() -> None:
     plan = make_plan(
-        images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
+        slides=(slide(1, ImageAsset(file_prefix="001", url=IMAGE_URL, width=100)),),
         name="One\nTwo",
     )
 
@@ -342,7 +408,7 @@ def test_render_transcript_keeps_a_project_name_on_one_line() -> None:
 
 def test_render_transcript_skips_a_block_that_renders_nothing() -> None:
     plan = make_plan(
-        images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
+        slides=(slide(1, ImageAsset(file_prefix="001", url=IMAGE_URL, width=100)),),
         texts=(TextBlock(position=2, markup="<div><br></div>"),),
     )
 
@@ -351,7 +417,7 @@ def test_render_transcript_skips_a_block_that_renders_nothing() -> None:
 
 def test_render_transcript_omits_an_embed_without_a_label_or_a_link() -> None:
     plan = make_plan(
-        images=(ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),),
+        slides=(slide(1, ImageAsset(file_prefix="001", url=IMAGE_URL, width=100)),),
         embeds=(embed(2, "", ""),),
     )
 

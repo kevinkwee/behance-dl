@@ -144,6 +144,51 @@ def test_image_asset_keeps_the_module_caption() -> None:
     assert asset.caption == "<div>A boo</div>"
 
 
+def test_image_asset_keeps_the_size_the_page_declares() -> None:
+    module = image_module(1, [variant("1400", 1400)], width=600, height=579)
+
+    asset = image_asset(module, "001", None)
+
+    assert asset is not None
+    assert (asset.display_width, asset.display_height) == (600, 579)
+
+
+def test_image_asset_leaves_the_declared_size_empty_when_the_payload_omits_it() -> None:
+    module = image_module(1, [variant("1400", 1400)], width="wide", height=None)
+
+    asset = image_asset(module, "001", None)
+
+    assert asset is not None
+    assert (asset.display_width, asset.display_height) == (0, 0)
+
+
+def test_image_asset_reads_a_declared_size_spelled_as_text() -> None:
+    module = image_module(1, [variant("1400", 1400)], width="600", height="579")
+
+    asset = image_asset(module, "001", None)
+
+    assert asset is not None
+    assert (asset.display_width, asset.display_height) == (600, 579)
+
+
+def test_image_asset_ignores_an_over_long_display_size() -> None:
+    module = image_module(1, [variant("1400", 1400)], width="9" * 5000, height="603")
+
+    asset = image_asset(module, "001", None)
+
+    assert asset is not None
+    assert (asset.display_width, asset.display_height) == (0, 603)
+
+
+def test_image_asset_ignores_a_pixel_size_beyond_its_bound() -> None:
+    module = image_module(1, [variant("1400", 1400)], width=10**400, height=603)
+
+    asset = image_asset(module, "001", None)
+
+    assert asset is not None
+    assert (asset.display_width, asset.display_height) == (0, 603)
+
+
 def test_image_asset_sanitizes_a_hostile_cdn_name() -> None:
     module = {
         "__typename": "ImageModule",
@@ -194,9 +239,59 @@ def test_plan_gallery_resolves_images_embeds_and_destination(tmp_path) -> None:
 
     assert plan.destination == tmp_path / "42_Planned-Slug"
     assert [asset.file_name for asset in plan.images] == ["001_one.png", "003_01_two.png"]
+    assert [slide.position for slide in plan.slides] == [1, 3]
+    assert plan.slides[1].is_collection is True
     assert plan.expected_images == 2
     assert len(plan.embeds) == 1
     assert plan.texts == (TextBlock(position=4, markup="<div>Words</div>"),)
+
+
+def test_plan_gallery_groups_a_collection_into_one_slide(tmp_path) -> None:
+    payload = {
+        "id": 61,
+        "modules": [
+            {
+                "__typename": "MediaCollectionModule",
+                "id": 1,
+                "caption": "<div>Row</div>",
+                "fullBleed": 0,
+                "components": [
+                    {
+                        "id": 11,
+                        "width": 320,
+                        "height": 603,
+                        "imageSizes": {"allAvailable": [variant("1400", 1400, name="one")]},
+                    },
+                    {
+                        "id": 12,
+                        "width": 320,
+                        "height": 603,
+                        "imageSizes": {"allAvailable": [variant("1400", 1400, name="two")]},
+                    },
+                ],
+            }
+        ],
+    }
+    client = FakeClient(pages={61: store_state_page(payload)})
+
+    plan = plan_gallery(client, "61", None, tmp_path)
+
+    assert len(plan.slides) == 1
+    assert plan.slides[0].is_collection is True
+    assert plan.slides[0].collection_caption == "<div>Row</div>"
+    assert [asset.file_name for asset in plan.slides[0].images] == [
+        "001_01_one.png",
+        "001_02_two.png",
+    ]
+
+
+def test_plan_gallery_keeps_the_full_bleed_flag_of_a_slide(tmp_path) -> None:
+    payload = {"id": 62, "modules": [image_module(1, [variant("source", 900)], fullBleed=1)]}
+    client = FakeClient(pages={62: store_state_page(payload)})
+
+    plan = plan_gallery(client, "62", None, tmp_path)
+
+    assert plan.slides[0].is_full_bleed is True
 
 
 def test_plan_gallery_wraps_malformed_modules(tmp_path) -> None:
@@ -220,6 +315,7 @@ def test_plan_gallery_reports_images_without_variants(tmp_path) -> None:
     plan = plan_gallery(client, "8", None, tmp_path)
 
     assert plan.images == ()
+    assert plan.slides == ()
     assert plan.expected_images == 1
 
 

@@ -12,8 +12,10 @@ from behance_dl.models import (
     GalleryProject,
     ImageAsset,
     SavedImage,
+    Slide,
     TextBlock,
 )
+from behance_dl.snapshot import snapshot_name
 from behance_dl.storage import (
     MANIFEST_NAME,
     download_images,
@@ -38,7 +40,9 @@ def make_plan(destination: Path, *urls: str, texts: tuple[TextBlock, ...] = ()) 
     project = GalleryProject(id=1, name="P", slug="P", modules=(), payload={"id": 1})
     return GalleryPlan(
         project=project,
-        images=images,
+        slides=tuple(
+            Slide(position=index, images=(asset,)) for index, asset in enumerate(images, start=1)
+        ),
         embeds=(),
         destination=destination,
         expected_images=len(images),
@@ -264,6 +268,16 @@ def test_save_gallery_writes_the_transcript_without_prose(tmp_path: Path) -> Non
 
     document = transcript_path(plan).read_text(encoding="utf-8")
     assert document == "# P\n\n![001_a.png](001_a.png)\n"
+
+
+def test_save_gallery_writes_the_page_snapshot(tmp_path: Path) -> None:
+    client = FakeClient(images={"https://x/a.png": PNG})
+    plan = make_plan(tmp_path / "gallery", "https://x/a.png")
+
+    save_gallery(client, plan, {}, workers=1)
+
+    document = (plan.destination / snapshot_name(plan.project)).read_text(encoding="utf-8")
+    assert '<img src="001_a.png"' in document
 
 
 def test_save_gallery_names_the_transcript_after_the_gallery_folder(tmp_path: Path) -> None:

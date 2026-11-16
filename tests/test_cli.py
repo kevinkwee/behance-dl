@@ -8,7 +8,7 @@ import pytest
 
 from behance_dl import __version__, cli
 from behance_dl.errors import GalleryError
-from behance_dl.models import GalleryPlan, GalleryProject, ImageAsset
+from behance_dl.models import GalleryPlan, GalleryProject, ImageAsset, Slide
 from conftest import FakeClient
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
@@ -20,7 +20,7 @@ def make_plan(destination: Path) -> GalleryPlan:
     images = (ImageAsset(file_prefix="001", url=IMAGE_URL, width=100),)
     return GalleryPlan(
         project=project,
-        images=images,
+        slides=(Slide(position=1, images=images),),
         embeds=(),
         destination=destination,
         expected_images=1,

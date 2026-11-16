@@ -9,12 +9,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A Markdown transcript in every gallery folder, named after the folder itself: a folder such as `123456789_Sample-Gallery/` holds `123456789_Sample-Gallery.md`. It renders the page in page order with every image, the caption that belongs to it, every text block, and embed links, so the words that explain a slide are no longer lost.
+- A Markdown transcript in every gallery folder, named after the folder itself: a folder such as `123456789_Sample-Gallery/` holds `123456789_Sample-Gallery.md`. It renders the page in page order with every image, the caption that belongs to it, every text block, and embed links, so the words that explain a slide are no longer lost. Images the page shows side by side stay on one line.
+- An offline HTML page in every gallery folder, named after the folder too. It mirrors the layout of the project page without Behance's own interface: the canvas colour and module spacing the author chose, full width slides that fill the column, narrower images at the size the author gave them, modules that hold several images as a row sized by each image's proportions, and text modules with their formatting. It carries its own styles and needs no network.
+- `GalleryPlan` carries the page's text modules and `ImageAsset` carries the caption the author wrote for it, so the renderings keep the author's words beside the images.
 - A `py.typed` marker, so type checkers apply the package's annotations.
 - mypy in strict mode, run over `src` and `.github/scripts` by CI.
 
 ### Changed
 
+- `GalleryPlan` now holds `slides` instead of `images`, so a module that shows several images stays one slide. The flat image list is an `images` property derived from the slides, which keeps the download order and the reported count unchanged.
+- `ImageAsset` records `display_width` and `display_height`, the size the page lays the image out at.
 - Ruff now checks annotation presence, security rules, and pytest style, with documented waivers for tests.
 - Development and CI now use uv, with dependencies pinned in `uv.lock`. The dev dependencies moved from the `dev` extra to a `dev` dependency group, so `pip install -e ".[dev]"` no longer installs the test and lint tools.
 

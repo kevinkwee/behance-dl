@@ -6,7 +6,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 `behance-dl` is a command line downloader for public Behance project galleries, published to PyPI as `behance-dl` with the import package `behance_dl`.
 
-It reads the project payload Behance inlines in a gallery page (`beconfig-store_state`), chooses one CDN variant per image, and downloads the files concurrently with resume support. With `--videos` it also resolves Behance video modules to direct MP4 renditions, and hands external embeds to the optional yt-dlp extra. It keeps gallery order, records which variant produced each file in `manifest.json`, records prototypes and video modules as links in `embeds.json`, and renders the page as a Markdown transcript named after the gallery folder.
+It reads the project payload Behance inlines in a gallery page (`beconfig-store_state`), chooses one CDN variant per image, and downloads the files concurrently with resume support. With `--videos` it also resolves Behance video modules to direct MP4 renditions, and hands external embeds to the optional yt-dlp extra. It keeps gallery order, records which variant produced each file in `manifest.json`, records prototypes and video modules as links in `embeds.json`, and renders the page twice in the gallery folder: a Markdown transcript and an offline HTML snapshot, both named after the folder.
 
 Technology stack: Python 3.12 or newer, standard library only at runtime, Hatchling as the PEP 517 backend, invoked by `uv build`, mypy for static types, pytest for tests, Ruff for lint and format, GitHub Actions for CI and publishing.
 
@@ -142,6 +142,7 @@ Follow this order and stop at the first step that fits.
 - Bound concurrency with `--workers`. More threads stop helping once Behance rate limits.
 - Back off on 429 and 5xx, and never retry a 4xx that will fail again.
 - Do not add caching, connection pools, or async IO without a measured need.
+- Both renderers feed payload prose to `html.parser`, which is quadratic on some malformed markup on an interpreter without the CPython fix for CVE-2025-6069. Parse each value once, and treat a length cap as its own change.
 
 ### Output Conventions
 
@@ -159,6 +160,8 @@ Follow this order and stop at the first step that fits.
 | `gallery.py` | Behance host and URL rules, gallery id parsing, payload parsing, module walking. |
 | `selection.py` | Bucket ranking, variant selection, building a `GalleryPlan`. |
 | `transcript.py` | Markdown rendering of the page: text blocks, captions, and embed links. |
+| `snapshot.py` | Offline HTML rendering of the page, with the payload's rich text sanitised. |
+| `links.py` | URL rules for the links author-written prose may carry. |
 | `storage.py` | Manifest reading and writing, parallel downloads, metadata files. |
 | `models.py` | Frozen dataclasses shared across modules. |
 | `naming.py` | File-name safety rules. |
@@ -187,7 +190,7 @@ Follow this order and stop at the first step that fits.
 
 ### Dependency Direction
 
-`cli` depends on `selection`, `storage`, and `video`. `selection` depends on `gallery` and `models`. `storage` depends on `client`, `models`, `naming`, and `transcript`. `transcript` depends on `models`. `gallery` depends on `client` and `models`. `video` depends on `client`, `models`, `errors`, `naming`, and `storage`. `models` and `naming` depend on nothing local. No module imports `cli`, and no cycles are allowed.
+`cli` depends on `selection`, `storage`, and `video`. `selection` depends on `gallery` and `models`. `storage` depends on `client`, `models`, `naming`, `snapshot`, and `transcript`. `snapshot` depends on `gallery`, `links`, and `models`. `transcript` depends on `links` and `models`. `links` depends on nothing local. `gallery` depends on `client` and `models`. `video` depends on `client`, `models`, `errors`, `naming`, and `storage`. `models` and `naming` depend on nothing local. No module imports `cli`, and no cycles are allowed.
 
 ## File Structure
 
@@ -238,7 +241,8 @@ Follow this order and stop at the first step that fits.
 - Two purpose-scoped allowlists exist. Images may come only from `https` URLs on `behance.net` or a `.behance.net` subdomain, enforced in `gallery.is_behance_url`. Video may come only from `https://www-ccv.adobe.io` player pages and `https://cdn-prod-ccv.adobe.com` media, enforced in `video.is_ccv_player_url` and `video.is_ccv_media_url`. Never widen one to cover the other.
 - Never build a file path from raw remote text. Pass names through `naming.safe_name`, and validate recorded names with `naming.is_plain_file_name`.
 - A recorded path must stay inside the gallery folder and share the planned stem.
-- Page prose is untrusted too. `transcript.py` escapes Markdown metacharacters, so a caption cannot add raw HTML or an image, and it turns an author's anchor into Markdown only when the target is an http or https URL with a host.
+- Page prose is untrusted too. `links.safe_link_target` admits only an http or https address with a host, so neither renderer can emit a `javascript:` or `file:` link. `transcript.py` escapes Markdown metacharacters, so a caption cannot add raw HTML or an image. `snapshot.py` escapes every text node, unwraps any tag outside its allowlist, balances what it keeps, and bounds how deep it nests, so payload markup cannot add a script or an event handler, close the document's own elements, carry on over the next module, or make the sanitiser's own work quadratic. It keeps only the classes it styles and the style declarations it validates, so payload markup cannot load a remote resource either.
+- The snapshot mirrors the page's own canvas style, but never copies it. `snapshot.py` reads a fixed set of selectors and declarations and validates each value, so the payload can set a background colour, a module gap, and the text and caption colours and sizes, and nothing else.
 - The single `# noqa: S310` in `client.py` stays justified only while every URL is built on the `BEHANCE_ORIGIN` constant, checked by the two allowlists above, or derived from an allowlisted playlist by `video.build_rendition_url`, and `SameHostRedirects` enforces the redirect rule above. Remove the suppression if any of those controls goes away.
 - Check the content type and the magic bytes against the requested media kind. An image download rejects MP4, AVIF, and HEIC bytes, and a video download rejects PNG and HTML bytes. A mismatch leaves no file and no `.part` behind.
 
@@ -255,7 +259,7 @@ Follow this order and stop at the first step that fits.
 
 ### Security Tests
 
-- Every control carries an adversarial test: a `file://` URL, a foreign host, a look-alike domain, a traversal file name, a manifest entry pointing at `project.json`, a non-image content type, a truncated body, an escaped angle bracket in a caption, a `javascript:` and a `file:` link target, and a destination that tries to close the Markdown link.
+- Every control carries an adversarial test: a `file://` URL, a foreign host, a look-alike domain, a traversal file name, a manifest entry pointing at `project.json`, a non-image content type, a truncated body, an escaped angle bracket in a caption, a `javascript:` and a `file:` link target, a destination that tries to close the Markdown link, a script tag and an event handler in page prose, a stray end tag and an unclosed element that would spill into the next module, and a style declaration that would load a remote resource.
 - Assert the side effect, not only the error. A rejected image must leave no file and no `.part` behind.
 - Use synthetic payloads. Never commit a real creator's project data as a fixture.
 
@@ -297,7 +301,7 @@ uv build
 
 ### Test File Rules
 
-- One file per module under test: `test_client.py`, `test_gallery.py`, `test_selection.py`, `test_transcript.py`, `test_storage.py`, `test_video.py`, `test_naming.py`, `test_cli.py`.
+- One file per module under test: `test_client.py`, `test_gallery.py`, `test_selection.py`, `test_transcript.py`, `test_snapshot.py`, `test_links.py`, `test_storage.py`, `test_video.py`, `test_naming.py`, `test_cli.py`.
 - `test_packaging.py` asserts the `py.typed` marker exists.
 - Shared doubles and payload builders live in `tests/conftest.py`, and test-local helpers stay in the test module that uses them.
 
@@ -368,7 +372,9 @@ uv build
 3. **Variant identity.** A CDN file name repeats across buckets, so the URL is the identity. `manifest.json` records the URL per saved file, which is why a width change refetches.
 4. **Atomic writes.** An image lands in a `.part` file, is checked for content type, magic bytes, and length, then renamed into place. The record is written after each image, so an interrupt stays truthful.
 5. **Video is a player, not a file.** A video module is an Adobe CCV iframe that carries no media. Resolving it means fetching the player page, reading the master playlist for the rendition heights, then fetching `<asset>_<height>.mp4` with the playlist token. That token expires, so it is never resume identity. A re-run reuses an existing `<position>_<asset>_*.mp4` without touching the network, unless the caller chose not to or the file is taller than the requested cap.
-6. **Exit codes.** `cli.main` maps a failure to `0`, `1`, `2`, or `130` and is the only place that does.
+6. **A slide is a module.** An `ImageModule` and a `MediaCollectionModule` both become one `Slide`, so the images a page shows in one row stay together in both renderers. Both kinds record the size the author gave each image, and a slide records whether the page lays it out full bleed.
+7. **Two renderings of one page.** The Markdown transcript and the HTML snapshot read the same plan, and both link each image by the name it was saved under, so a JPEG served as `.png` points at the `.jpg` on disk. Neither fetches anything: the payload's prose is untrusted input, escaped on the way out.
+8. **Exit codes.** `cli.main` maps a failure to `0`, `1`, `2`, or `130` and is the only place that does.
 
 ## Rule of Thumb
 

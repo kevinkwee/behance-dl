@@ -13,14 +13,18 @@ from .gallery import (
     fetch_project,
     image_sources,
     is_behance_url,
+    is_collection_module,
+    module_image_sources,
     parse_gallery_id,
     text_blocks,
 )
-from .models import GalleryPlan, ImageAsset
+from .models import GalleryPlan, GalleryProject, ImageAsset, Slide
 
 _SOURCE_BUCKET = "source"
 _STILL_BUCKET_SUFFIX = "_still"
 _OPTIMISED_BUCKET = "_opt_"
+_MAX_PIXEL_DIGITS = 6
+_MAX_PIXELS = 100_000
 
 
 def bucket(url: str) -> str:
@@ -99,7 +103,53 @@ def image_asset(
         url=url,
         width=width,
         caption=caption if isinstance(caption, str) else "",
+        display_width=_pixels(image_source.get("width")),
+        display_height=_pixels(image_source.get("height")),
     )
+
+
+def _pixels(value: object) -> int:
+    """Read a payload pixel count, or return 0 when it is not a whole number in range."""
+    number = 0
+    if isinstance(value, str) and value.isdecimal() and len(value) <= _MAX_PIXEL_DIGITS:
+        number = int(value)
+    elif isinstance(value, int) and not isinstance(value, bool):
+        number = value
+    return number if 0 < number <= _MAX_PIXELS else 0
+
+
+def _text(value: object) -> str:
+    """Read payload text, or return an empty string for any other shape."""
+    return value if isinstance(value, str) else ""
+
+
+def _flag(value: object) -> bool:
+    """Read a payload flag, which the page data spells as either a boolean or 1."""
+    return value is True or value == 1
+
+
+def plan_slides(project: GalleryProject, max_width: int | None) -> list[Slide]:
+    """Resolve each image-bearing module into the slide the page shows."""
+    slides: list[Slide] = []
+    for position, module in enumerate(project.modules, start=1):
+        images: list[ImageAsset] = []
+        for file_prefix, source in module_image_sources(module, position):
+            asset = image_asset(source, file_prefix, max_width)
+            if asset is not None:
+                images.append(asset)
+        if not images:
+            continue
+        collection = is_collection_module(module)
+        slides.append(
+            Slide(
+                position=position,
+                images=tuple(images),
+                is_collection=collection,
+                collection_caption=_text(module.get("caption")) if collection else "",
+                is_full_bleed=_flag(module.get("fullBleed")),
+            )
+        )
+    return slides
 
 
 def plan_gallery(
@@ -109,21 +159,17 @@ def plan_gallery(
     gallery_id = parse_gallery_id(gallery)
     project = fetch_project(client, gallery_id)
     try:
-        sources = list(image_sources(project))
-        images: list[ImageAsset] = []
-        for file_prefix, image_source in sources:
-            asset = image_asset(image_source, file_prefix, max_width)
-            if asset is not None:
-                images.append(asset)
+        images_count = len(list(image_sources(project)))
+        slides = plan_slides(project, max_width)
         embeds = embed_assets(project)
         texts = text_blocks(project)
     except (TypeError, ValueError, OverflowError, AttributeError) as error:
         raise GalleryError(f"gallery {gallery_id}: unexpected project data") from error
     return GalleryPlan(
         project=project,
-        images=tuple(images),
+        slides=tuple(slides),
         embeds=tuple(embeds),
         destination=output_root / project.folder_name,
-        expected_images=len(sources),
+        expected_images=images_count,
         texts=tuple(texts),
     )
