@@ -9,6 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `captions.md` in a gallery folder when the project carries author-written prose. It renders the page in page order with every image, the caption that belongs to it, every text block, and embed links, so the words that explain a slide are no longer lost.
 - A `py.typed` marker, so type checkers apply the package's annotations.
 - mypy in strict mode, run over `src` and `.github/scripts` by CI.
 

@@ -9,6 +9,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
 
+from .captions import CAPTIONS_NAME, has_captions, render_captions
 from .client import BehanceClient
 from .models import GalleryPlan, ImageAsset, SavedImage, StoredImage
 from .naming import is_plain_file_name
@@ -53,7 +54,7 @@ def save_gallery(
     *,
     workers: int,
 ) -> int:
-    """Write one gallery's metadata and images, returning how many images failed."""
+    """Write one gallery's records, transcript, and images, returning how many images failed."""
     destination = plan.destination
     destination.mkdir(parents=True, exist_ok=True)
     write_json(destination / "project.json", plan.project.payload)
@@ -83,11 +84,24 @@ def save_gallery(
         workers=workers,
         on_saved=remember,
     )
+    write_captions(destination, plan, record)
     if failed:
         print(f"{failed} of {len(plan.images)} images failed", file=sys.stderr)
     else:
         print(f"done: {len(plan.images)} images in {destination}")
     return failed
+
+
+def write_captions(destination: Path, plan: GalleryPlan, record: dict[str, SavedImage]) -> None:
+    """Write the page transcript when there is prose, warning instead of failing on a disk error."""
+    if not has_captions(plan):
+        return
+    # The saved extension follows the bytes, so the transcript links the recorded name.
+    saved_names = {name: entry.path for name, entry in record.items()}
+    try:
+        write_text(destination / CAPTIONS_NAME, render_captions(plan, saved_names))
+    except OSError as error:
+        print(f"warning: could not write {CAPTIONS_NAME}: {error}", file=sys.stderr)
 
 
 def download_images(
@@ -174,9 +188,15 @@ def remove_superseded(path: Path) -> None:
 
 def write_json(path: Path, contents: object) -> None:
     """Write JSON so a reader never sees a half-written file."""
+    write_text(path, json.dumps(contents, indent=2))
+
+
+def write_text(path: Path, contents: str) -> None:
+    """Write text so a reader never sees a half-written file."""
     temporary = path.with_name(path.name + ".part")
     try:
-        temporary.write_text(json.dumps(contents, indent=2), encoding="utf-8")
+        # A caption can carry a lone surrogate, which the UTF-8 encoder rejects.
+        temporary.write_text(contents, encoding="utf-8", errors="replace")
         temporary.replace(path)
     except BaseException:
         temporary.unlink(missing_ok=True)

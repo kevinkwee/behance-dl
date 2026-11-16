@@ -33,11 +33,25 @@ class ImageAsset:
     file_prefix: str
     url: str
     width: int
+    caption: str = ""
 
     @property
     def file_name(self) -> str:
         cdn_name = Path(urllib.parse.urlsplit(self.url).path).name
         return f"{self.file_prefix}_{safe_name(cdn_name, 'image')}"
+
+    @property
+    def position(self) -> int:
+        """Return the module position the file prefix was built from."""
+        return int(self.file_prefix.partition("_")[0])
+
+
+@dataclass(frozen=True)
+class TextBlock:
+    """Author-written HTML that sits in page order among the page's assets."""
+
+    position: int
+    markup: str
 
 
 @dataclass(frozen=True)
@@ -61,6 +75,7 @@ class GalleryPlan:
     embeds: tuple[EmbedAsset, ...]
     destination: Path
     expected_images: int
+    texts: tuple[TextBlock, ...] = ()
 
 
 @dataclass(frozen=True)

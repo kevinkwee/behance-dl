@@ -8,7 +8,14 @@ from typing import Any
 
 from .client import BehanceClient
 from .errors import GalleryError
-from .gallery import embed_assets, fetch_project, image_sources, is_behance_url, parse_gallery_id
+from .gallery import (
+    embed_assets,
+    fetch_project,
+    image_sources,
+    is_behance_url,
+    parse_gallery_id,
+    text_blocks,
+)
 from .models import GalleryPlan, ImageAsset
 
 _SOURCE_BUCKET = "source"
@@ -86,7 +93,13 @@ def image_asset(
     if selected is None:
         return None
     width, url = selected
-    return ImageAsset(file_prefix=file_prefix, url=url, width=width)
+    caption = image_source.get("caption")
+    return ImageAsset(
+        file_prefix=file_prefix,
+        url=url,
+        width=width,
+        caption=caption if isinstance(caption, str) else "",
+    )
 
 
 def plan_gallery(
@@ -103,6 +116,7 @@ def plan_gallery(
             if asset is not None:
                 images.append(asset)
         embeds = embed_assets(project)
+        texts = text_blocks(project)
     except (TypeError, ValueError, OverflowError, AttributeError) as error:
         raise GalleryError(f"gallery {gallery_id}: unexpected project data") from error
     return GalleryPlan(
@@ -111,4 +125,5 @@ def plan_gallery(
         embeds=tuple(embeds),
         destination=output_root / project.folder_name,
         expected_images=len(sources),
+        texts=tuple(texts),
     )

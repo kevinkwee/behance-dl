@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from behance_dl.models import GalleryPlan, GalleryProject, ImageAsset, SavedImage
+from behance_dl.captions import CAPTIONS_NAME
+from behance_dl.models import (
+    GalleryPlan,
+    GalleryProject,
+    ImageAsset,
+    SavedImage,
+    TextBlock,
+)
 from behance_dl.storage import (
     MANIFEST_NAME,
     download_images,
@@ -23,7 +30,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 JPG = b"\xff\xd8\xff" + b"\x00" * 24
 
 
-def make_plan(destination: Path, *urls: str) -> GalleryPlan:
+def make_plan(destination: Path, *urls: str, texts: tuple[TextBlock, ...] = ()) -> GalleryPlan:
     images = tuple(
         ImageAsset(file_prefix=f"{index:03d}", url=url, width=100)
         for index, url in enumerate(urls, start=1)
@@ -35,6 +42,7 @@ def make_plan(destination: Path, *urls: str) -> GalleryPlan:
         embeds=(),
         destination=destination,
         expected_images=len(images),
+        texts=texts,
     )
 
 
@@ -228,3 +236,100 @@ def test_save_gallery_reports_a_manifest_write_failure_without_failing(
     monkeypatch.setattr(Path, "write_text", refuse)
 
     assert save_gallery(client, plan, {}, workers=1) == 0
+
+
+def test_save_gallery_writes_the_page_transcript(tmp_path: Path) -> None:
+    client = FakeClient(images={"https://x/a.png": PNG})
+    plan = make_plan(
+        tmp_path / "gallery",
+        "https://x/a.png",
+        texts=(TextBlock(position=2, markup="<div>Words</div>"),),
+    )
+
+    save_gallery(client, plan, {}, workers=1)
+
+    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    assert document == "# P\n\n![001_a.png](001_a.png)\n\nWords\n"
+
+
+def test_save_gallery_skips_the_transcript_without_prose(tmp_path: Path) -> None:
+    client = FakeClient(images={"https://x/a.png": PNG})
+    plan = make_plan(tmp_path / "gallery", "https://x/a.png")
+
+    save_gallery(client, plan, {}, workers=1)
+
+    assert not (plan.destination / CAPTIONS_NAME).exists()
+
+
+def test_save_gallery_links_the_extension_the_cdn_actually_served(tmp_path: Path) -> None:
+    client = FakeClient(images={"https://x/a.png": JPG})
+    plan = make_plan(
+        tmp_path / "gallery",
+        "https://x/a.png",
+        texts=(TextBlock(position=2, markup="Words"),),
+    )
+
+    save_gallery(client, plan, {}, workers=1)
+
+    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    assert "![001_a.png](001_a.jpg)" in document
+
+
+def test_save_gallery_writes_a_transcript_carrying_a_lone_surrogate(tmp_path: Path) -> None:
+    client = FakeClient(images={"https://x/a.png": PNG})
+    plan = make_plan(
+        tmp_path / "gallery",
+        "https://x/a.png",
+        texts=(TextBlock(position=2, markup="\ud800"),),
+    )
+
+    assert save_gallery(client, plan, {}, workers=1) == 0
+    assert (plan.destination / CAPTIONS_NAME).exists()
+
+
+def test_save_gallery_links_the_planned_name_when_the_image_fails(tmp_path: Path) -> None:
+    client = FakeClient()
+    plan = make_plan(
+        tmp_path / "gallery",
+        "https://x/a.png",
+        texts=(TextBlock(position=2, markup="Words"),),
+    )
+
+    assert save_gallery(client, plan, {}, workers=1) == 1
+    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    assert "![001_a.png](001_a.png)" in document
+
+
+def test_save_gallery_survives_a_caption_the_parser_refuses(tmp_path: Path) -> None:
+    client = FakeClient(images={"https://x/a.png": PNG})
+    plan = make_plan(
+        tmp_path / "gallery",
+        "https://x/a.png",
+        texts=(TextBlock(position=2, markup="<div>&#" + "9" * 5000 + ";after</div>"),),
+    )
+
+    assert save_gallery(client, plan, {}, workers=1) == 0
+    document = (plan.destination / CAPTIONS_NAME).read_text(encoding="utf-8")
+    assert "after" in document
+
+
+def test_save_gallery_warns_when_the_transcript_cannot_be_written(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    client = FakeClient(images={"https://x/a.png": PNG})
+    plan = make_plan(
+        tmp_path / "gallery",
+        "https://x/a.png",
+        texts=(TextBlock(position=2, markup="Words"),),
+    )
+    original = Path.write_text
+
+    def refuse(self: Path, data: str, encoding: str | None = None, **kwargs: object) -> None:
+        if self.name == CAPTIONS_NAME + ".part":
+            raise OSError(32, "in use")
+        original(self, data, encoding=encoding or "utf-8", **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", refuse)
+
+    assert save_gallery(client, plan, {}, workers=1) == 0
+    assert CAPTIONS_NAME in capsys.readouterr().err

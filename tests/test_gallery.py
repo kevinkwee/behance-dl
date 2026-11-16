@@ -12,8 +12,9 @@ from behance_dl.gallery import (
     is_behance_host,
     is_behance_url,
     parse_gallery_id,
+    text_blocks,
 )
-from behance_dl.models import GalleryProject
+from behance_dl.models import GalleryProject, TextBlock
 from conftest import FakeClient, image_module, store_state_page, variant
 
 
@@ -178,3 +179,34 @@ def test_embed_assets_record_links_instead_of_files() -> None:
     assert (embeds[0].width, embeds[0].height) == (800, 450)
     assert embeds[1].source_url == "https://player.example.com/v/1"
     assert embeds[2].source_url == ""
+
+
+def test_text_blocks_read_text_modules_in_page_order() -> None:
+    project = GalleryProject(
+        id=1,
+        name="",
+        slug="",
+        modules=(
+            {"__typename": "TextModule", "id": 1, "text": "<div>One</div>"},
+            image_module(2, [variant("source", 10)]),
+            {"__typename": "TextModule", "id": 3, "text": "<div>Two</div>"},
+        ),
+        payload={},
+    )
+
+    assert text_blocks(project) == [
+        TextBlock(position=1, markup="<div>One</div>"),
+        TextBlock(position=3, markup="<div>Two</div>"),
+    ]
+
+
+def test_text_blocks_treat_a_non_string_body_as_empty() -> None:
+    project = GalleryProject(
+        id=1,
+        name="",
+        slug="",
+        modules=({"__typename": "TextModule", "id": 1, "text": 5},),
+        payload={},
+    )
+
+    assert text_blocks(project) == [TextBlock(position=1, markup="")]

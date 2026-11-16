@@ -11,7 +11,7 @@ from typing import Any
 
 from .client import BehanceClient
 from .errors import GalleryError
-from .models import EmbedAsset, GalleryProject
+from .models import EmbedAsset, GalleryProject, TextBlock
 
 BEHANCE_ORIGIN = "https://www.behance.net"
 
@@ -90,6 +90,19 @@ def image_sources(project: GalleryProject) -> Iterator[tuple[str, dict[str, Any]
             components = module.get("components") or []
             for index, component in enumerate(components, start=1):
                 yield f"{position:03d}_{index:02d}", component
+
+
+def text_blocks(project: GalleryProject) -> list[TextBlock]:
+    """Collect the page's text modules in page order."""
+    blocks: list[TextBlock] = []
+    for position, module in enumerate(project.modules, start=1):
+        if module.get("__typename") != "TextModule":
+            continue
+        markup = module.get("text")
+        blocks.append(
+            TextBlock(position=position, markup=markup if isinstance(markup, str) else "")
+        )
+    return blocks
 
 
 def embed_assets(project: GalleryProject) -> list[EmbedAsset]:

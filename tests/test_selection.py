@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from behance_dl.errors import GalleryError
-from behance_dl.models import GalleryProject
+from behance_dl.models import GalleryProject, TextBlock
 from behance_dl.selection import (
     bucket,
     bucket_rank,
@@ -135,6 +135,15 @@ def test_image_asset_names_files_after_the_cdn_basename() -> None:
     assert (asset.width, asset.file_prefix) == (1400, "003")
 
 
+def test_image_asset_keeps_the_module_caption() -> None:
+    module = image_module(1, [variant("1400", 1400)], caption="<div>A boo</div>")
+
+    asset = image_asset(module, "001", None)
+
+    assert asset is not None
+    assert asset.caption == "<div>A boo</div>"
+
+
 def test_image_asset_sanitizes_a_hostile_cdn_name() -> None:
     module = {
         "__typename": "ImageModule",
@@ -176,6 +185,7 @@ def test_plan_gallery_resolves_images_embeds_and_destination(tmp_path) -> None:
                     {"id": 31, "imageSizes": {"allAvailable": [variant("1400", 1400, name="two")]}}
                 ],
             },
+            {"__typename": "TextModule", "id": 4, "text": "<div>Words</div>"},
         ],
     }
     client = FakeClient(pages={42: store_state_page(payload)})
@@ -186,6 +196,7 @@ def test_plan_gallery_resolves_images_embeds_and_destination(tmp_path) -> None:
     assert [asset.file_name for asset in plan.images] == ["001_one.png", "003_01_two.png"]
     assert plan.expected_images == 2
     assert len(plan.embeds) == 1
+    assert plan.texts == (TextBlock(position=4, markup="<div>Words</div>"),)
 
 
 def test_plan_gallery_wraps_malformed_modules(tmp_path) -> None:
