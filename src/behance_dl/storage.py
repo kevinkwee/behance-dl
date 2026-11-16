@@ -8,7 +8,6 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
 
 from .client import BehanceClient
 from .models import GalleryPlan, ImageAsset, SavedImage, StoredImage
@@ -173,11 +172,11 @@ def remove_superseded(path: Path) -> None:
         print(f"warning: could not remove {path}: {error}", file=sys.stderr)
 
 
-def write_json(path: Path, data: Any) -> None:
+def write_json(path: Path, contents: object) -> None:
     """Write JSON so a reader never sees a half-written file."""
     temporary = path.with_name(path.name + ".part")
     try:
-        temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        temporary.write_text(json.dumps(contents, indent=2), encoding="utf-8")
         temporary.replace(path)
     except BaseException:
         temporary.unlink(missing_ok=True)

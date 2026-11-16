@@ -7,9 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A `py.typed` marker, so type checkers apply the package's annotations.
+- mypy in strict mode, run over `src` and `.github/scripts` by CI.
+
 ### Changed
 
+- Ruff now checks annotation presence, security rules, and pytest style, with documented waivers for tests.
 - Development and CI now use uv, with dependencies pinned in `uv.lock`. The dev dependencies moved from the `dev` extra to a `dev` dependency group, so `pip install -e ".[dev]"` no longer installs the test and lint tools.
+
+### Removed
+
+- Dropped Python 3.9, 3.10, and 3.11 support, so the package requires Python 3.12 or newer.
 
 ## [0.2.0] - 2026-11-15
 

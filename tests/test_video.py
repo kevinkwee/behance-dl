@@ -32,7 +32,7 @@ from conftest import CDN, FakeClient
 
 ASSET_ID = "MvcfZFbza4U"
 PLAYER_URL = f"https://www-ccv.adobe.io/v1/player/ccv/{ASSET_ID}/embed?api_key=behance1"
-TOKEN = "hdnts=st%3D1%7Eexp%3D2%7Eacl%3D%2Fz%2F"
+TOKEN = "hdnts=st%3D1%7Eexp%3D2%7Eacl%3D%2Fz%2F"  # noqa: S105  # fixture token, not a credential
 PLAYER_MARKER = "/v1/player/ccv/"
 PLAYLIST_MARKER = "master.m3u8"
 MEDIA_BASE = f"https://cdn-prod-ccv.adobe.com/{ASSET_ID}/rend"
@@ -68,6 +68,13 @@ def fake_client(media: dict[str, bytes] | None = None) -> FakeClient:
         texts={PLAYER_MARKER: PLAYER_PAGE, PLAYLIST_MARKER: MASTER},
         images=media if media is not None else {f"{MEDIA_BASE}/{ASSET_ID}_1080.mp4": MP4_BYTES},
     )
+
+
+def install_fake_youtube_dl(monkeypatch, fake: type) -> None:
+    """Put a fake yt_dlp module in front of the optional import."""
+    module = types.ModuleType("yt_dlp")
+    monkeypatch.setattr(module, "YoutubeDL", fake, raising=False)
+    monkeypatch.setitem(sys.modules, "yt_dlp", module)
 
 
 @pytest.mark.parametrize(
@@ -385,9 +392,7 @@ def test_external_video_runs_yt_dlp_and_keeps_the_result(tmp_path: Path, monkeyp
             path.write_bytes(MP4_BYTES)
             return {"id": "abc", "ext": "mp4", "requested_downloads": [{"filepath": str(path)}]}
 
-    module = types.ModuleType("yt_dlp")
-    module.YoutubeDL = FakeYoutubeDL  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    install_fake_youtube_dl(monkeypatch, FakeYoutubeDL)
 
     failed = download_videos(
         FakeClient(), [embed(YOUTUBE_URL)], tmp_path, max_height=None, reuse=reuse_downloaded(None)
@@ -451,9 +456,7 @@ def test_playlist_embed_saves_one_entry_and_reports_success(tmp_path: Path, monk
                 ],
             }
 
-    module = types.ModuleType("yt_dlp")
-    module.YoutubeDL = PlaylistYoutubeDL  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    install_fake_youtube_dl(monkeypatch, PlaylistYoutubeDL)
 
     failed = download_videos(
         FakeClient(), [embed(YOUTUBE_URL)], tmp_path, max_height=None, reuse=no_reuse
@@ -482,9 +485,7 @@ def test_external_options_keep_one_item_and_a_staging_dir(tmp_path: Path, monkey
             saved.write_bytes(MP4_BYTES)
             return {"id": "abc", "requested_downloads": [{"filepath": str(saved)}]}
 
-    module = types.ModuleType("yt_dlp")
-    module.YoutubeDL = RecordingYoutubeDL  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    install_fake_youtube_dl(monkeypatch, RecordingYoutubeDL)
 
     failed = download_videos(
         FakeClient(), [embed(YOUTUBE_URL)], tmp_path, max_height=None, reuse=no_reuse
@@ -516,9 +517,7 @@ def test_failed_external_download_leaves_no_file(tmp_path: Path, monkeypatch) ->
             (staging / "005_abc.mp4.part").write_bytes(b"partial")
             raise RuntimeError("network died")
 
-    module = types.ModuleType("yt_dlp")
-    module.YoutubeDL = FailingYoutubeDL  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    install_fake_youtube_dl(monkeypatch, FailingYoutubeDL)
 
     failed = download_videos(
         FakeClient(), [embed(YOUTUBE_URL)], tmp_path, max_height=None, reuse=no_reuse
@@ -558,9 +557,7 @@ def test_empty_external_result_is_reported_without_crashing(tmp_path: Path, monk
         def extract_info(self, url: str, download: bool = False) -> dict:
             return {"id": "empty", "entries": []}
 
-    module = types.ModuleType("yt_dlp")
-    module.YoutubeDL = EmptyYoutubeDL  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "yt_dlp", module)
+    install_fake_youtube_dl(monkeypatch, EmptyYoutubeDL)
 
     failed = download_videos(
         FakeClient(), [embed(YOUTUBE_URL)], tmp_path, max_height=None, reuse=no_reuse

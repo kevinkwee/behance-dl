@@ -14,7 +14,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar
+from typing import IO, TypeVar, cast
 
 from .errors import DownloadError, GalleryError
 
@@ -58,10 +58,10 @@ class SameHostRedirects(urllib.request.HTTPRedirectHandler):
     def redirect_request(
         self,
         req: urllib.request.Request,
-        fp: object,
+        fp: IO[bytes],
         code: int,
         msg: str,
-        headers: object,
+        headers: http.client.HTTPMessage,
         newurl: str,
     ) -> urllib.request.Request | None:
         origin = urllib.parse.urlsplit(req.full_url)
@@ -72,7 +72,7 @@ class SameHostRedirects(urllib.request.HTTPRedirectHandler):
                 code,
                 f"refused redirect to {newurl}",
                 headers,
-                fp,  # type: ignore[arg-type]
+                fp,
             )
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -153,19 +153,27 @@ class BehanceClient:
     def _open(self, url: str) -> http.client.HTTPResponse:
         host = urllib.parse.urlsplit(url).hostname or ""
         try:
-            return self._opener.open(self._request(url), timeout=self._timeout)
+            return self._open_once(url)
         except urllib.error.HTTPError as error:
             if error.code != 403 or not self._solve_challenge(error, host):
                 raise
         try:
-            return self._opener.open(self._request(url), timeout=self._timeout)
+            return self._open_once(url)
         except urllib.error.HTTPError as error:
             if error.code == 403 and self._solve_challenge(error, host):
                 raise GalleryError(f"{url} keeps answering Behance's bot challenge") from error
             raise
 
+    def _open_once(self, url: str) -> http.client.HTTPResponse:
+        # typeshed types OpenerDirector.open as Any, but an https URL answers with HTTPResponse.
+        response = self._opener.open(self._request(url), timeout=self._timeout)
+        return cast(http.client.HTTPResponse, response)
+
     def _request(self, url: str) -> urllib.request.Request:
-        return urllib.request.Request(url, headers=self._headers())
+        # Every URL is built on BEHANCE_ORIGIN, checked by a gallery or video allowlist, or
+        # derived from an allowlisted playlist by video.build_rendition_url. Redirects stay on
+        # https and on the same host.
+        return urllib.request.Request(url, headers=self._headers())  # noqa: S310
 
     def _retry(self, action: Callable[[], T]) -> T:
         for attempt in range(1, self._attempts):
@@ -233,9 +241,11 @@ def challenge_cookie(value: str, host: str) -> http.cookiejar.Cookie:
 
 def parse_retry_after(value: str | None) -> float | None:
     """Read a Retry-After delay in seconds, ignoring dates and negative values."""
+    if value is None:
+        return None
     try:
         seconds = float(value)
-    except (TypeError, ValueError):
+    except ValueError:
         return None
     return seconds if seconds >= 0 else None
 

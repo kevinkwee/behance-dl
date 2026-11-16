@@ -34,7 +34,9 @@ class FakeHeaders(email.message.Message):
 class FakeResponse:
     """A response body usable as a context manager."""
 
-    def __init__(self, body: bytes, content_type: str = "image/png", length: int | None = None):
+    def __init__(
+        self, body: bytes, content_type: str = "image/png", length: int | None = None
+    ) -> None:
         self._body = body
         self._stream = io.BytesIO(body)
         self.headers = FakeHeaders(content_type, len(body) if length is None else length)
@@ -72,7 +74,7 @@ class FakeClient:
         pages: dict[int, str] | None = None,
         images: dict[str, bytes] | None = None,
         texts: dict[str, str] | None = None,
-    ):
+    ) -> None:
         self._pages = pages or {}
         self._images = {url.split("?")[0]: body for url, body in (images or {}).items()}
         self._texts = texts or {}

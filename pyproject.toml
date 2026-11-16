@@ -7,7 +7,7 @@ name = "behance-dl"
 dynamic = ["version"]
 description = "Download the images of public Behance project galleries."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Michael Elian Kevin", email = "19345886+kevinkwee@users.noreply.github.com" }]
@@ -19,9 +19,6 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Topic :: Multimedia :: Graphics",
@@ -43,7 +40,7 @@ Changelog = "https://github.com/kevinkwee/behance-dl/blob/main/CHANGELOG.md"
 Releases = "https://github.com/kevinkwee/behance-dl/releases"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
+dev = ["mypy>=2.4", "pytest>=8", "pytest-cov>=5", "ruff>=0.17"]
 
 [tool.hatch.version]
 path = "src/behance_dl/__init__.py"
@@ -58,18 +55,30 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py312"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RET", "PTH", "RUF"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RET", "PTH", "RUF", "ANN", "S", "PT"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["behance_dl", "conftest"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["PTH"]
+# Tests assert on values by design (S101) and take fixtures pytest injects (ANN001).
+"tests/*" = ["S101", "ANN001"]
 
 [tool.coverage.run]
 source = ["behance_dl"]
 branch = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+enable_error_code = ["ignore-without-code"]
+files = ["src", ".github/scripts"]
+
+[[tool.mypy.overrides]]
+# yt-dlp is an optional extra, and the import is guarded at runtime.
+module = ["yt_dlp", "yt_dlp.*"]
+ignore_missing_imports = true

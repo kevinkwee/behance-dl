@@ -18,7 +18,7 @@ No API key, account, or browser automation is required.
 pip install behance-dl
 ```
 
-Requires Python 3.9 or newer. No third-party runtime dependencies.
+Requires Python 3.12 or newer. No third-party runtime dependencies.
 
 ## Usage
 
@@ -142,6 +142,7 @@ environment.
 ```console
 uv sync
 uv run pytest
+uv run mypy
 uv run ruff check .
 uv run ruff format --check .
 uv build

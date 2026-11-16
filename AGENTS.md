@@ -8,7 +8,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 It reads the project payload Behance inlines in a gallery page (`beconfig-store_state`), chooses one CDN variant per image, and downloads the files concurrently with resume support. With `--videos` it also resolves Behance video modules to direct MP4 renditions, and hands external embeds to the optional yt-dlp extra. It keeps gallery order, records which variant produced each file in `manifest.json`, and records prototypes and video modules as links in `embeds.json`.
 
-Technology stack: Python 3.9 or newer, standard library only at runtime, Hatchling as the PEP 517 backend, invoked by `uv build`, pytest for tests, Ruff for lint and format, GitHub Actions for CI and publishing.
+Technology stack: Python 3.12 or newer, standard library only at runtime, Hatchling as the PEP 517 backend, invoked by `uv build`, mypy for static types, pytest for tests, Ruff for lint and format, GitHub Actions for CI and publishing.
 
 Key behaviours that must not regress:
 
@@ -21,7 +21,7 @@ Key behaviours that must not regress:
 
 ## Prerequisites
 
-- Python 3.9 or newer. The floor exists because `ThreadPoolExecutor.shutdown(cancel_futures=True)` requires 3.9.
+- Python 3.12 or newer. See Language and Runtime Constraints for what the floor rules out.
 - `uv`, which provides the environment, the lockfile, and the build command.
 - No external services, credentials, or API keys. Behance is accessed anonymously.
 - Optional: `uv sync --extra video` adds yt-dlp so external video hosts can be downloaded. A later plain `uv sync` removes it again.
@@ -65,23 +65,31 @@ Key behaviours that must not regress:
 
 ## Language and Runtime Constraints
 
-The package supports Python 3.9, so these are unavailable at runtime:
+The floor is Python 3.12, so the code cannot use features added in 3.13 or later, such as `typing.TypeIs`, `typing.ReadOnly`, and `copy.replace`.
 
-- `match`/`case` and PEP 604 unions in evaluated positions (3.10+).
-- Builtin generics in evaluated positions, such as `list[int]` (3.9+). Every module uses `from __future__ import annotations`, so annotations may use them, but runtime expressions may not.
-- `datetime.UTC`, `itertools.batched`, and `tomllib` (3.11+).
-- Exception groups (3.11+).
+Everything through 3.12 is available: `match`/`case`, PEP 604 unions, builtin generics, `datetime.UTC`, `tomllib`, `itertools.batched`, and exception groups.
 
-Keep `from __future__ import annotations` at the top of every module.
+Keep `from __future__ import annotations` at the top of every module, so annotations stay unevaluated and forward references need no quoting.
 
 ## Code Quality
 
 ### Linting and Formatting
 
-- Ruff handles both linting and formatting, configured in `pyproject.toml` at line length 100.
-- After changing files, run `uv run ruff check .` and `uv run ruff format .`. Both must pass before a change is complete.
-- Fix a violation before configuring or suppressing it. Use a per-line `noqa` only for a genuine false positive, and never a blanket suppression.
+- Ruff handles both linting and formatting, configured in `pyproject.toml` at line length 100 with `target-version = "py312"`.
+- The selection covers style, imports, modernisation, bugbear, simplification, pathlib, return conventions (`RET`), Ruff-specific rules (`RUF`), annotations (`ANN`), security (`S`), and pytest style (`PT`).
+- After changing files, run `uv run ruff format .`, `uv run ruff check .`, and `uv run mypy`. All three must be clean before a change is complete.
+- `tests/*` waives only `S101`, because asserting is a test's job, and `ANN001`, because pytest injects fixtures that the test does not annotate.
 - `tests/conftest.py` is the shared test double module, registered as first-party for import sorting.
+
+#### Handling a Linter Violation
+
+Follow this order and stop at the first step that fits.
+
+1. **Fix the code.** This is almost always the right answer.
+2. **Configure the rule** in `pyproject.toml` when its defaults do not fit the project, and comment why.
+3. **Per-line `noqa`** with the specific rule codes and a short reason, only for a genuine false positive or an unavoidable pattern. Never a bare `# noqa`.
+4. **Block-level suppression** with `# ruff: disable[RULE]` and `# ruff: enable[RULE]` for a contiguous run of legitimate violations, always re-enabled.
+5. **Narrow per-file ignore** in `[tool.ruff.lint.per-file-ignores]` when a whole file or directory legitimately violates a rule, as `tests/*` does.
 
 ### Naming
 
@@ -92,9 +100,12 @@ Keep `from __future__ import annotations` at the top of every module.
 
 ### Strong Typing
 
-- Annotate every public function's parameters and return value.
+- Annotate every public function's parameters and return value. `uv run mypy` enforces this over `src` and `.github/scripts` with `strict = true`, and CI runs it.
 - Avoid `Any` except where a JSON payload is genuinely untyped, and narrow it immediately with `isinstance` checks.
-- Do not cast to `Any` to make an error disappear.
+- Do not cast to `Any` to make an error disappear. A cast to a concrete type is allowed where a signature outside this project is imprecise, and needs a comment saying why.
+- A `# type: ignore` carries the same obligations as a `# noqa`: the specific error code and a reason.
+- The package ships `src/behance_dl/py.typed`, so every public annotation is part of the published API and a change to one is semver-visible. `tests/test_packaging.py` guards the marker.
+- Tests follow the `tests/*` waiver. Return annotations still apply.
 
 ### Immutability
 
@@ -213,7 +224,7 @@ Keep `from __future__ import annotations` at the top of every module.
 
 ### Secure by Design
 
-- Deny by default. The URL allowlist admits only `https` on Behance hosts, and anything else is dropped rather than fetched.
+- Deny by default. The image URL allowlist admits only `https` on Behance hosts, and anything else is dropped rather than fetched.
 - Fail closed. An unparseable or unexpected payload raises `GalleryError` and produces no files.
 - Refuse a redirect that leaves https or changes host. `client.SameHostRedirects` enforces that rule, so the allowlists still describe where a request can end up.
 - Keep the surface minimal. The tool sends one request per page, one per image, and writes only inside the gallery folder.
@@ -226,6 +237,7 @@ Keep `from __future__ import annotations` at the top of every module.
 - Two purpose-scoped allowlists exist. Images may come only from `https` URLs on `behance.net` or a `.behance.net` subdomain, enforced in `gallery.is_behance_url`. Video may come only from `https://www-ccv.adobe.io` player pages and `https://cdn-prod-ccv.adobe.com` media, enforced in `video.is_ccv_player_url` and `video.is_ccv_media_url`. Never widen one to cover the other.
 - Never build a file path from raw remote text. Pass names through `naming.safe_name`, and validate recorded names with `naming.is_plain_file_name`.
 - A recorded path must stay inside the gallery folder and share the planned stem.
+- The single `# noqa: S310` in `client.py` stays justified only while every URL is built on the `BEHANCE_ORIGIN` constant, checked by the two allowlists above, or derived from an allowlisted playlist by `video.build_rendition_url`, and `SameHostRedirects` enforces the redirect rule above. Remove the suppression if any of those controls goes away.
 - Check the content type and the magic bytes against the requested media kind. An image download rejects MP4, AVIF, and HEIC bytes, and a video download rejects PNG and HTML bytes. A mismatch leaves no file and no `.part` behind.
 
 ### Secrets Management
@@ -263,6 +275,7 @@ Keep `from __future__ import annotations` at the top of every module.
 ```powershell
 uv sync
 uv run pytest
+uv run mypy
 uv run ruff check .
 uv run ruff format --check .
 uv build
@@ -283,6 +296,7 @@ uv build
 ### Test File Rules
 
 - One file per module under test: `test_client.py`, `test_gallery.py`, `test_selection.py`, `test_storage.py`, `test_video.py`, `test_naming.py`, `test_cli.py`.
+- `test_packaging.py` asserts the `py.typed` marker exists.
 - Shared doubles and payload builders live in `tests/conftest.py`, and test-local helpers stay in the test module that uses them.
 
 ### Coverage
@@ -317,7 +331,7 @@ uv build
 ## Versioning
 
 - The version lives in `src/behance_dl/__init__.py` and Hatchling reads it from there, so bump it in one place.
-- Every release must come from a working tree with passing tests, passing lint, and no uncommitted changes.
+- Every release must come from a working tree with passing tests, passing lint, passing types, and no uncommitted changes.
 
 ## Code Review
 
