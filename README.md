@@ -1,9 +1,11 @@
 # behance-dl
 
-[![PyPI version](https://img.shields.io/pypi/v/behance-dl)](https://pypi.org/project/behance-dl/)
-[![Supported Python versions](https://img.shields.io/pypi/pyversions/behance-dl)](https://pypi.org/project/behance-dl/)
-[![CI status](https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
-[![License: MIT](https://img.shields.io/pypi/l/behance-dl)](https://github.com/kevinkwee/behance-dl/blob/main/LICENSE)
+<p align="center">
+  <a href="https://pypi.org/project/behance-dl/"><img src="https://img.shields.io/pypi/v/behance-dl" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/behance-dl/"><img src="https://img.shields.io/pypi/pyversions/behance-dl" alt="Supported Python versions"></a>
+  <a href="https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush"><img src="https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml/badge.svg?branch=main&amp;event=push" alt="CI status"></a>
+  <a href="https://github.com/kevinkwee/behance-dl/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/behance-dl" alt="License: MIT"></a>
+</p>
 
 Download the images of a public [Behance](https://www.behance.net) project gallery.
 
