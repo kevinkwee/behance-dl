@@ -1,5 +1,10 @@
 # behance-dl
 
+[![PyPI version](https://img.shields.io/pypi/v/behance-dl)](https://pypi.org/project/behance-dl/)
+[![Supported Python versions](https://img.shields.io/pypi/pyversions/behance-dl)](https://pypi.org/project/behance-dl/)
+[![CI status](https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
+[![License: MIT](https://img.shields.io/pypi/l/behance-dl)](https://github.com/kevinkwee/behance-dl/blob/main/LICENSE)
+
 Download the images of a public [Behance](https://www.behance.net) project gallery.
 
 `behance-dl` reads the project data Behance inlines in the gallery page, picks the best CDN
