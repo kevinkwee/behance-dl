@@ -180,6 +180,11 @@ uv build
 Release notes live in [CHANGELOG.md](CHANGELOG.md), and every tagged version has a
 [GitHub release](https://github.com/kevinkwee/behance-dl/releases).
 
+## Sponsor
+
+If `behance-dl` saves you time, you can
+[support its development on Ko-fi](https://ko-fi.com/kevinkwee27).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
