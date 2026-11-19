@@ -60,14 +60,41 @@ target-version = "py312"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RET", "PTH", "RUF", "ANN", "S", "PT"]
+select = ["ALL"]
+pydocstyle.convention = "google"
+ignore = [
+  "COM812", # conflicts with the formatter
+  "CPY", # no per-file copyright notices. LICENSE covers the package.
+  "D10", # docstrings stay optional, written where they add information
+  "EM101", # a short fixed message reads better inline at the raise site
+  "EM102", # assigning the message to a local only moves the same formatting one line away
+  "PLR0913", # download_images and the test plan builder stay explicit without a config object
+  "T201", # the project reports through stdout and stderr, not a logging framework
+  "TRY003", # the project raises a few broad error types and puts the detail in each message
+]
+
+[tool.ruff.lint.pylint]
+max-returns = 7 # suffix_from_head returns as soon as it recognises a file format
 
 [tool.ruff.lint.isort]
 known-first-party = ["behance_dl", "conftest"]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests assert on values by design (S101) and take fixtures pytest injects (ANN001).
-"tests/*" = ["S101", "ANN001"]
+"tests/*" = [
+  "ANN001", # pytest injects fixtures the test does not annotate
+  "ARG", # fakes accept the signatures they stand in for
+  "FBT001", # parametrized tests and fakes take boolean parameters
+  "FBT002", # fakes copy external signatures that default a boolean flag
+  "PLR2004", # tests compare against the concrete values they assert
+  "S101", # asserting is a test's job
+]
+
+# Release scripts run as standalone files, not as an importable package.
+".github/scripts/*" = ["INP001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.coverage.run]
 source = ["behance_dl"]

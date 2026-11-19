@@ -75,10 +75,12 @@ Keep `from __future__ import annotations` at the top of every module, so annotat
 
 ### Linting and Formatting
 
-- Ruff handles both linting and formatting, configured in `pyproject.toml` at line length 100 with `target-version = "py312"`.
-- The selection covers style, imports, modernisation, bugbear, simplification, pathlib, return conventions (`RET`), Ruff-specific rules (`RUF`), annotations (`ANN`), security (`S`), and pytest style (`PT`).
+- Ruff handles both linting and formatting, configured in `pyproject.toml` at line length 100 with `target-version = "py312"`, double quotes, and space indentation.
+- The lint selection is `ALL`, so each Ruff upgrade in `uv.lock` brings its new stable rules, and every ignored rule carries its reason in `pyproject.toml`.
+- Docstrings follow the Google convention. Missing-docstring rules stay off, so a docstring is written where it adds information rather than on every definition.
 - After changing files, run `uv run ruff format .`, `uv run ruff check .`, and `uv run mypy`. All three must be clean before a change is complete.
-- `tests/*` waives only `S101`, because asserting is a test's job, and `ANN001`, because pytest injects fixtures that the test does not annotate.
+- `tests/*` waives `ANN001`, `ARG`, `FBT001`, `FBT002`, `PLR2004`, and `S101`, each with its reason in `pyproject.toml`.
+- `.github/scripts/*` waives `INP001`, because a release script runs as a standalone file.
 - `tests/conftest.py` is the shared test double module, registered as first-party for import sorting.
 
 #### Handling a Linter Violation
@@ -273,7 +275,7 @@ Follow this order and stop at the first step that fits.
 - Follow Arrange-Act-Assert, with one act and one logical assertion per test.
 - Tests must be independent, deterministic, and order-agnostic.
 - Pin specific exception types in `pytest.raises`.
-- Test behaviour through public functions. Stubbing `client._opener` is the accepted exception, because the cookie jar has no other seam.
+- Test behaviour through public functions. Two private accesses have no public alternative: stub `client._opener` because the client builds its own opener, and read `client._jar` because the client exposes no jar.
 - Add a regression test for every bug fixed.
 
 ### How to Run Tests

@@ -7,16 +7,20 @@ import http.client
 import io
 import sys
 import urllib.error
-from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import __version__
 from .client import BehanceClient
 from .errors import BehanceError
-from .models import GalleryPlan
 from .selection import plan_gallery
 from .storage import load_saved, save_gallery
 from .video import download_videos, no_reuse, reuse_downloaded
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from .models import GalleryPlan
 
 
 def print_plan_summary(plan: GalleryPlan) -> None:

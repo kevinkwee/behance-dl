@@ -6,12 +6,15 @@ import html
 import json
 import re
 import urllib.parse
-from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .client import BehanceClient
 from .errors import GalleryError
 from .models import EmbedAsset, GalleryProject, TextBlock
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from .client import BehanceClient
 
 BEHANCE_ORIGIN = "https://www.behance.net"
 

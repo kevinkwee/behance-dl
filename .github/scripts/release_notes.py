@@ -18,10 +18,11 @@ def section(version: str, changelog: str) -> str:
 
 def main(argv: list[str]) -> int:
     """Print the notes for the version named by the first argument."""
-    if len(argv) < 2:
+    arguments = argv[1:]
+    if not arguments:
         print("usage: release_notes.py <tag>", file=sys.stderr)
         return 2
-    version = argv[1].strip().lstrip("v")
+    version = arguments[0].strip().lstrip("v")
     print(section(version, CHANGELOG.read_text(encoding="utf-8")))
     return 0
 

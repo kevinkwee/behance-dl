@@ -180,8 +180,7 @@ def download_videos(
     for embed in assets:
         try:
             stored = _save_video(client, embed, destination, max_height, reuse)
-        # A single failed video must not abort the remaining ones.
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001  # one failed video must not stop the rest
             failed += 1
             print(f"video failed {embed.position:03d}: {error}", file=sys.stderr)
             continue
@@ -205,7 +204,7 @@ def reuse_downloaded(max_height: int | None) -> ReuseLookup:
     return lookup
 
 
-def no_reuse(destination: Path, embed: EmbedAsset) -> StoredVideo | None:
+def no_reuse(_destination: Path, _embed: EmbedAsset) -> StoredVideo | None:
     """Skip the on-disk check, so every video is fetched again."""
     return None
 
@@ -296,7 +295,7 @@ def _drop_superseded(destination: Path, position: int, asset_id: str, keep: Path
 def _save_external(embed: EmbedAsset, destination: Path) -> StoredVideo:
     prefix = f"{embed.position:03d}"
     try:
-        from yt_dlp import YoutubeDL
+        from yt_dlp import YoutubeDL  # noqa: PLC0415  # optional extra, so a top-level import fails
     except ImportError as error:
         raise DownloadError(
             "external videos need the optional extra, install behance-dl[video]"

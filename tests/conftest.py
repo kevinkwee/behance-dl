@@ -5,12 +5,17 @@ from __future__ import annotations
 import email.message
 import io
 import json
-from pathlib import Path
+import urllib.error
+from typing import TYPE_CHECKING, Self, override
 
 import pytest
 
-from behance_dl.client import IMAGE, MediaKind
+from behance_dl.client import IMAGE, MediaKind, suffix_from_head
+from behance_dl.errors import DownloadError
 from behance_dl.models import GalleryProject
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 CDN = "https://mir-s3-cdn-cf.behance.net/project_modules"
 
@@ -24,10 +29,12 @@ class FakeHeaders(email.message.Message):
         if length is not None:
             self["Content-Length"] = str(length)
 
+    @override
     def get_content_type(self) -> str:
         return self["Content-Type"].split(";")[0].strip()
 
-    def get_content_charset(self) -> str | None:
+    @override
+    def get_content_charset(self, failobj: object = None) -> str:
         return "utf-8"
 
 
@@ -44,7 +51,7 @@ class FakeResponse:
     def read(self, size: int = -1) -> bytes:
         return self._stream.read(size)
 
-    def __enter__(self) -> FakeResponse:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
@@ -76,7 +83,7 @@ class FakeClient:
         texts: dict[str, str] | None = None,
     ) -> None:
         self._pages = pages or {}
-        self._images = {url.split("?")[0]: body for url, body in (images or {}).items()}
+        self._images = {url.split("?", maxsplit=1)[0]: body for url, body in (images or {}).items()}
         self._texts = texts or {}
         self.requested: list[str] = []
 
@@ -92,13 +99,8 @@ class FakeClient:
 
     def download(self, url: str, destination: Path, *, kind: MediaKind = IMAGE) -> Path:
         """Mirror the real client: 404 for missing media, and the same kind checks."""
-        import urllib.error
-
-        from behance_dl.client import suffix_from_head
-        from behance_dl.errors import DownloadError
-
         self.requested.append(url)
-        body = self._images.get(url.split("?")[0])
+        body = self._images.get(url.split("?", maxsplit=1)[0])
         if body is None:
             raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
         suffix = suffix_from_head(body[:16])

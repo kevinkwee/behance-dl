@@ -7,6 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Ruff now selects all stable rules, with a reasoned waiver list, Google docstring conventions, and explicit formatter settings.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

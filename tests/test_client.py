@@ -5,7 +5,7 @@ from __future__ import annotations
 import email.message
 import io
 import urllib.error
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -21,6 +21,9 @@ from behance_dl.client import (
 )
 from behance_dl.errors import DownloadError, GalleryError
 from conftest import FakeOpener, FakeResponse
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 URL = "https://www.behance.net/gallery/1/gallery"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
@@ -41,7 +44,7 @@ def make_client(outcomes: list[object], attempts: int = 3) -> tuple[BehanceClien
     """Return a client wired to a scripted opener."""
     client = BehanceClient(timeout=1.0, attempts=attempts)
     opener = FakeOpener(outcomes)
-    client._opener = opener
+    client._opener = opener  # noqa: SLF001  # the client builds its own opener
     return client, opener
 
 
@@ -78,7 +81,7 @@ def test_get_text_solves_the_challenge_and_retries() -> None:
 
     assert client.get_text(URL) == "page"
     assert len(opener.calls) == 2
-    cookie = next(iter(client._jar))
+    cookie = next(iter(client._jar))  # noqa: SLF001  # the client exposes no jar
     assert cookie.name == CHALLENGE_COOKIE
     assert cookie.value == "a" * 64
 

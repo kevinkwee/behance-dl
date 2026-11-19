@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import urllib.parse
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .client import BehanceClient
 from .errors import GalleryError
 from .gallery import (
     embed_assets,
@@ -19,6 +17,11 @@ from .gallery import (
     text_blocks,
 )
 from .models import GalleryPlan, GalleryProject, ImageAsset, Slide
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from .client import BehanceClient
 
 _SOURCE_BUCKET = "source"
 _STILL_BUCKET_SUFFIX = "_still"

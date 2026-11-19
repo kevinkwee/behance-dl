@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
+from typing import Self
 
 import pytest
 
@@ -379,7 +380,7 @@ def test_external_video_runs_yt_dlp_and_keeps_the_result(tmp_path: Path, monkeyp
             self._options = options
             self._path: Path | None = None
 
-        def __enter__(self) -> FakeYoutubeDL:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *exc_info: object) -> None:
@@ -435,7 +436,7 @@ def test_playlist_embed_saves_one_entry_and_reports_success(tmp_path: Path, monk
         def __init__(self, options: dict) -> None:
             self._options = options
 
-        def __enter__(self) -> PlaylistYoutubeDL:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *exc_info: object) -> None:
@@ -474,7 +475,7 @@ def test_external_options_keep_one_item_and_a_staging_dir(tmp_path: Path, monkey
             self._options = options
             recorded.append(options)
 
-        def __enter__(self) -> RecordingYoutubeDL:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *exc_info: object) -> None:
@@ -505,7 +506,7 @@ def test_failed_external_download_leaves_no_file(tmp_path: Path, monkeypatch) ->
         def __init__(self, options: dict) -> None:
             self._options = options
 
-        def __enter__(self) -> FailingYoutubeDL:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *exc_info: object) -> None:
@@ -548,7 +549,7 @@ def test_empty_external_result_is_reported_without_crashing(tmp_path: Path, monk
         def __init__(self, options: dict) -> None:
             self._options = options
 
-        def __enter__(self) -> EmptyYoutubeDL:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *exc_info: object) -> None:

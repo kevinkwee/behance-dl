@@ -6,14 +6,17 @@ import html
 import re
 import urllib.parse
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from string import Template
+from typing import TYPE_CHECKING, override
 
 from .gallery import BEHANCE_ORIGIN
 from .links import safe_link_target
 from .models import EmbedAsset, GalleryPlan, GalleryProject, ImageAsset, Slide, TextBlock
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Mapping
 
 _ALLOWED_TAGS = frozenset(
     {
@@ -147,6 +150,7 @@ class _MarkupSanitiser(HTMLParser):
         self._skipped: Counter[str] = Counter()
         self._dropped = 0
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in _DROPPED_CONTENT_TAGS:
             self._dropped += 1
@@ -160,6 +164,7 @@ class _MarkupSanitiser(HTMLParser):
         self._parts.append(f"<{tag}{self._attributes(tag, attrs)}>")
         self._open.append(tag)
 
+    @override
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self._dropped or tag not in _ALLOWED_TAGS:
             return
@@ -170,6 +175,7 @@ class _MarkupSanitiser(HTMLParser):
             self._close_implicit(tag)
             self._parts.append(f"<{tag}{attributes}></{tag}>")
 
+    @override
     def handle_endtag(self, tag: str) -> None:
         if tag in _DROPPED_CONTENT_TAGS:
             self._dropped = max(0, self._dropped - 1)
@@ -188,6 +194,7 @@ class _MarkupSanitiser(HTMLParser):
             if opened == tag:
                 break
 
+    @override
     def handle_data(self, data: str) -> None:
         if not self._dropped:
             self._parts.append(html.escape(data, quote=False))

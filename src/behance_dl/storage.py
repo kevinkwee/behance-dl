@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .client import BehanceClient
 from .models import GalleryPlan, ImageAsset, SavedImage, StoredImage
 from .naming import is_plain_file_name
 from .snapshot import render_snapshot, snapshot_name
 from .transcript import render_transcript, transcript_name
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
+    from .client import BehanceClient
 
 MANIFEST_NAME = "manifest.json"
 
@@ -134,8 +138,7 @@ def download_images(
             name = asset.file_name
             try:
                 stored = future.result()
-            # A single failed image must not abort the remaining ones.
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001  # one failed image must not stop the rest
                 failed += 1
                 print(f"[{completed}/{total}] failed {name}: {error}", file=sys.stderr)
                 continue

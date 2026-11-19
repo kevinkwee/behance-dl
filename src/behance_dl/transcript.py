@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
 from html.parser import HTMLParser
+from typing import TYPE_CHECKING, override
 
 from .links import safe_link_target
 from .models import EmbedAsset, GalleryPlan, GalleryProject, ImageAsset, Slide
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _BLOCK_TAGS = frozenset({"div", "p", "li"})
 _MARKDOWN_SPECIALS = frozenset("\\`*_{}[]<>&#!|~")
@@ -40,6 +43,7 @@ class MarkdownWriter(HTMLParser):
         self._href = ""
         self._label: list[str] = []
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "br":
             self._break()
@@ -50,16 +54,19 @@ class MarkdownWriter(HTMLParser):
             self._href = dict(attrs).get("href") or ""
             self._label = []
 
+    @override
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "br":
             self._break()
 
+    @override
     def handle_endtag(self, tag: str) -> None:
         if tag in _BLOCK_TAGS:
             self._boundary()
         elif tag == "a":
             self._flush_link()
 
+    @override
     def handle_data(self, data: str) -> None:
         if self._href:
             self._label.append(data)

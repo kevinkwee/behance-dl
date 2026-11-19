@@ -11,14 +11,17 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
-from typing import IO, TypeVar, cast
+from typing import IO, TYPE_CHECKING, TypeVar, cast, override
 
 from .errors import DownloadError, GalleryError
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
 CHALLENGE_COOKIE = "js_challenge_value"
+CHALLENGE_STATUS = 403
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -55,6 +58,7 @@ VIDEO = MediaKind("video/", frozenset({".mp4", ".webm"}))
 class SameHostRedirects(urllib.request.HTTPRedirectHandler):
     """Refuse a redirect that leaves https or changes host, so allowlists still hold."""
 
+    @override
     def redirect_request(
         self,
         req: urllib.request.Request,
@@ -155,19 +159,19 @@ class BehanceClient:
         try:
             return self._open_once(url)
         except urllib.error.HTTPError as error:
-            if error.code != 403 or not self._solve_challenge(error, host):
+            if error.code != CHALLENGE_STATUS or not self._solve_challenge(error, host):
                 raise
         try:
             return self._open_once(url)
         except urllib.error.HTTPError as error:
-            if error.code == 403 and self._solve_challenge(error, host):
+            if error.code == CHALLENGE_STATUS and self._solve_challenge(error, host):
                 raise GalleryError(f"{url} keeps answering Behance's bot challenge") from error
             raise
 
     def _open_once(self, url: str) -> http.client.HTTPResponse:
         # typeshed types OpenerDirector.open as Any, but an https URL answers with HTTPResponse.
         response = self._opener.open(self._request(url), timeout=self._timeout)
-        return cast(http.client.HTTPResponse, response)
+        return cast("http.client.HTTPResponse", response)
 
     def _request(self, url: str) -> urllib.request.Request:
         # Every URL is built on BEHANCE_ORIGIN, checked by a gallery or video allowlist, or

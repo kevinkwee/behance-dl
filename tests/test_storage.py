@@ -166,7 +166,7 @@ def test_download_images_records_success_and_counts_failures(tmp_path: Path) -> 
         tmp_path,
         {},
         workers=1,
-        on_saved=lambda name, entry: recorded.__setitem__(name, entry),
+        on_saved=recorded.__setitem__,
     )
 
     assert failed == 1
