@@ -6,6 +6,7 @@ import email.message
 import io
 import json
 import urllib.error
+import urllib.request
 from typing import TYPE_CHECKING, Self, override
 
 import pytest
@@ -58,15 +59,22 @@ class FakeResponse:
         return None
 
 
-class FakeOpener:
+class FakeOpener(urllib.request.OpenerDirector):
     """Opener that replays a scripted sequence of responses and errors."""
 
     def __init__(self, outcomes: list[object]) -> None:
+        super().__init__()
         self._outcomes = outcomes
         self.calls: list[str] = []
 
-    def open(self, request: object, timeout: float | None = None) -> object:
-        self.calls.append(getattr(request, "full_url", str(request)))
+    @override
+    def open(
+        self,
+        fullurl: str | urllib.request.Request,
+        data: object = None,
+        timeout: float | None = None,
+    ) -> object:
+        self.calls.append(fullurl if isinstance(fullurl, str) else fullurl.full_url)
         outcome = self._outcomes.pop(0)
         if isinstance(outcome, BaseException):
             raise outcome
@@ -102,7 +110,7 @@ class FakeClient:
         self.requested.append(url)
         body = self._images.get(url.split("?", maxsplit=1)[0])
         if body is None:
-            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+            raise urllib.error.HTTPError(url, 404, "Not Found", email.message.Message(), None)
         suffix = suffix_from_head(body[:16])
         if suffix is None:
             raise DownloadError(f"{url} did not return a recognised file format")
@@ -126,7 +134,9 @@ def store_state_page(payload: object) -> str:
     )
 
 
-def image_module(module_id: int, variants: list[dict[str, object]], **extra: object) -> dict:
+def image_module(
+    module_id: int, variants: list[dict[str, object]], **extra: object
+) -> dict[str, object]:
     """Build an ImageModule payload."""
     module = {
         "__typename": "ImageModule",

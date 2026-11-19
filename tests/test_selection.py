@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from behance_dl.errors import GalleryError
@@ -15,6 +17,9 @@ from behance_dl.selection import (
     select_image_url,
 )
 from conftest import FakeClient, image_module, store_state_page, variant
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def url_of(bucket_name: str, width: int, name: str = "abc") -> str:
@@ -211,7 +216,7 @@ def test_image_asset_sanitizes_a_hostile_cdn_name() -> None:
     assert asset.file_name == "001_a-b-c.png"
 
 
-def test_plan_gallery_resolves_images_embeds_and_destination(tmp_path) -> None:
+def test_plan_gallery_resolves_images_embeds_and_destination(tmp_path: Path) -> None:
     payload = {
         "id": 42,
         "name": "Planned",
@@ -246,7 +251,7 @@ def test_plan_gallery_resolves_images_embeds_and_destination(tmp_path) -> None:
     assert plan.texts == (TextBlock(position=4, markup="<div>Words</div>"),)
 
 
-def test_plan_gallery_groups_a_collection_into_one_slide(tmp_path) -> None:
+def test_plan_gallery_groups_a_collection_into_one_slide(tmp_path: Path) -> None:
     payload = {
         "id": 61,
         "modules": [
@@ -285,7 +290,7 @@ def test_plan_gallery_groups_a_collection_into_one_slide(tmp_path) -> None:
     ]
 
 
-def test_plan_gallery_keeps_the_full_bleed_flag_of_a_slide(tmp_path) -> None:
+def test_plan_gallery_keeps_the_full_bleed_flag_of_a_slide(tmp_path: Path) -> None:
     payload = {"id": 62, "modules": [image_module(1, [variant("source", 900)], fullBleed=1)]}
     client = FakeClient(pages={62: store_state_page(payload)})
 
@@ -294,7 +299,7 @@ def test_plan_gallery_keeps_the_full_bleed_flag_of_a_slide(tmp_path) -> None:
     assert plan.slides[0].is_full_bleed is True
 
 
-def test_plan_gallery_wraps_malformed_modules(tmp_path) -> None:
+def test_plan_gallery_wraps_malformed_modules(tmp_path: Path) -> None:
     payload = {
         "id": 7,
         "modules": [{"__typename": "MediaCollectionModule", "id": 1, "components": 5}],
@@ -305,7 +310,7 @@ def test_plan_gallery_wraps_malformed_modules(tmp_path) -> None:
         plan_gallery(client, "7", None, tmp_path)
 
 
-def test_plan_gallery_reports_images_without_variants(tmp_path) -> None:
+def test_plan_gallery_reports_images_without_variants(tmp_path: Path) -> None:
     payload = {
         "id": 8,
         "modules": [{"__typename": "ImageModule", "id": 1, "width": 10, "src": "file:///a.png"}],

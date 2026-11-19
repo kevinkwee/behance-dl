@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from types import ModuleType
+
+    import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "release_notes.py"
 
@@ -25,7 +31,7 @@ SAMPLE = """# Changelog
 """
 
 
-def load_module() -> object:
+def load_module() -> ModuleType:
     """Load the release notes script as a module."""
     spec = importlib.util.spec_from_file_location("release_notes", SCRIPT)
     assert spec is not None
@@ -61,7 +67,7 @@ def test_section_returns_nothing_for_an_unknown_version() -> None:
     assert module.section("", SAMPLE) == ""
 
 
-def test_main_requires_a_tag(capsys) -> None:
+def test_main_requires_a_tag(capsys: pytest.CaptureFixture[str]) -> None:
     module = load_module()
 
     assert module.main(["release_notes.py"]) == 2

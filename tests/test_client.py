@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import email.message
+import http.client
 import io
 import urllib.error
+import urllib.request
 from typing import TYPE_CHECKING
 
 import pytest
@@ -44,7 +46,7 @@ def make_client(outcomes: list[object], attempts: int = 3) -> tuple[BehanceClien
     """Return a client wired to a scripted opener."""
     client = BehanceClient(timeout=1.0, attempts=attempts)
     opener = FakeOpener(outcomes)
-    client._opener = opener  # noqa: SLF001  # the client builds its own opener
+    client._opener = opener  # noqa: SLF001  # no public opener seam
     return client, opener
 
 
@@ -259,7 +261,7 @@ def test_redirects_off_host_or_off_https_are_refused(newurl: str) -> None:
 
     with pytest.raises(urllib.error.HTTPError, match="refused redirect"):
         handler.redirect_request(
-            _redirect(URL), io.BytesIO(b""), 302, "Found", email.message.Message(), newurl
+            _redirect(URL), io.BytesIO(b""), 302, "Found", http.client.HTTPMessage(), newurl
         )
 
 
@@ -271,7 +273,7 @@ def test_same_host_https_redirects_are_followed() -> None:
         io.BytesIO(b""),
         302,
         "Found",
-        email.message.Message(),
+        http.client.HTTPMessage(),
         "https://www.behance.net/elsewhere",
     )
 

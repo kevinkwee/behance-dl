@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import IO, TYPE_CHECKING, TypeVar, cast, override
+from typing import IO, TYPE_CHECKING, Protocol, TypeVar, cast, override
 
 from .errors import DownloadError, GalleryError
 
@@ -53,6 +53,15 @@ class MediaKind:
 
 IMAGE = MediaKind("image/", frozenset({".png", ".jpg", ".gif", ".webp"}))
 VIDEO = MediaKind("video/", frozenset({".mp4", ".webm"}))
+
+
+class GalleryClient(Protocol):
+    """The page and media access that planning and saving need from a client."""
+
+    def get_text(self, url: str) -> str: ...
+
+    def download(self, url: str, destination: Path, *, kind: MediaKind = IMAGE) -> Path:
+        """Save a remote file and return where it landed, which may carry a different suffix."""
 
 
 class SameHostRedirects(urllib.request.HTTPRedirectHandler):

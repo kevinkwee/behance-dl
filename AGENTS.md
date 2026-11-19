@@ -79,7 +79,7 @@ Keep `from __future__ import annotations` at the top of every module, so annotat
 - The lint selection is `ALL`, so each Ruff upgrade in `uv.lock` brings its new stable rules, and every ignored rule carries its reason in `pyproject.toml`.
 - Docstrings follow the Google convention. Missing-docstring rules stay off, so a docstring is written where it adds information rather than on every definition.
 - After changing files, run `uv run ruff format .`, `uv run ruff check .`, and `uv run mypy`. All three must be clean before a change is complete.
-- `tests/*` waives `ANN001`, `ARG`, `FBT001`, `FBT002`, `PLR2004`, and `S101`, each with its reason in `pyproject.toml`.
+- `tests/*` waives `ARG`, `FBT001`, `FBT002`, `PLR2004`, and `S101`, each with its reason in `pyproject.toml`.
 - `.github/scripts/*` waives `INP001`, because a release script runs as a standalone file.
 - `tests/conftest.py` is the shared test double module, registered as first-party for import sorting.
 
@@ -102,12 +102,12 @@ Follow this order and stop at the first step that fits.
 
 ### Strong Typing
 
-- Annotate every public function's parameters and return value. `uv run mypy` enforces this over `src` and `.github/scripts` with `strict = true`, and CI runs it.
+- Annotate every public function's parameters and return value. `uv run mypy` enforces this over `src`, `tests`, and `.github/scripts` with `strict = true`, and CI runs it.
 - Avoid `Any` except where a JSON payload is genuinely untyped, and narrow it immediately with `isinstance` checks.
 - Do not cast to `Any` to make an error disappear. A cast to a concrete type is allowed where a signature outside this project is imprecise, and needs a comment saying why.
 - A `# type: ignore` carries the same obligations as a `# noqa`: the specific error code and a reason.
 - The package ships `src/behance_dl/py.typed`, so every public annotation is part of the published API and a change to one is semver-visible. `tests/test_packaging.py` guards the marker.
-- Tests follow the `tests/*` waiver. Return annotations still apply.
+- Tests are annotated and checked under the same strict settings, because a fake must honour the contract it stands in for.
 
 ### Immutability
 
@@ -158,7 +158,7 @@ Follow this order and stop at the first step that fits.
 
 | Module | Responsibility |
 |--------|----------------|
-| `client.py` | HTTP session, cookie challenge, retries, atomic media transfers. |
+| `client.py` | HTTP session, `GalleryClient`, cookie challenge, retries, atomic media transfers. |
 | `gallery.py` | Behance host and URL rules, gallery id parsing, payload parsing, module walking. |
 | `selection.py` | Bucket ranking, variant selection, building a `GalleryPlan`. |
 | `transcript.py` | Markdown rendering of the page: text blocks, captions, and embed links. |
@@ -186,7 +186,7 @@ Follow this order and stop at the first step that fits.
 
 ### Dependency Injection
 
-- Pass the client into `plan_gallery` and `save_gallery` instead of building one there, so a fake replaces the network in tests.
+- Pass the client into `plan_gallery` and `save_gallery` instead of building one there, so a fake replaces the network in tests. They accept `GalleryClient`, the two-method protocol in `client.py`.
 - Keep the composition root in `cli.main`. It is the only place that constructs a `BehanceClient`.
 - Do not inject a pure helper such as `naming.safe_name`. Call it directly.
 
@@ -275,7 +275,7 @@ Follow this order and stop at the first step that fits.
 - Follow Arrange-Act-Assert, with one act and one logical assertion per test.
 - Tests must be independent, deterministic, and order-agnostic.
 - Pin specific exception types in `pytest.raises`.
-- Test behaviour through public functions. Two private accesses have no public alternative: stub `client._opener` because the client builds its own opener, and read `client._jar` because the client exposes no jar.
+- Test behaviour through public functions. Two private accesses have no public alternative: stub `client._opener` because the client builds its own opener and offers no public seam, and read `client._jar` because the client exposes no jar.
 - Add a regression test for every bug fixed.
 
 ### How to Run Tests

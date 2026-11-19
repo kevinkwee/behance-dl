@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Never
 
 import pytest
 
 from behance_dl import __version__, cli
 from behance_dl.errors import GalleryError
 from behance_dl.models import GalleryPlan, GalleryProject, ImageAsset, Slide
+from behance_dl.video import no_reuse
 from conftest import FakeClient
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
@@ -77,7 +79,9 @@ def test_version_flag_reports_the_package_version(capsys: pytest.CaptureFixture[
     assert __version__ in capsys.readouterr().out
 
 
-def test_dry_run_writes_nothing(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_dry_run_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     plan = make_plan(tmp_path / "42_Planned")
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
 
@@ -90,7 +94,9 @@ def test_dry_run_writes_nothing(tmp_path: Path, monkeypatch, capsys) -> None:
     assert IMAGE_URL in output
 
 
-def test_main_downloads_and_reports_success(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_main_downloads_and_reports_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     plan = make_plan(tmp_path / "42_Planned")
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
     monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
@@ -102,7 +108,9 @@ def test_main_downloads_and_reports_success(tmp_path: Path, monkeypatch, capsys)
     assert "done:" in capsys.readouterr().out
 
 
-def test_main_returns_one_when_a_gallery_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_main_returns_one_when_a_gallery_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     def fail(*args: object, **kwargs: object) -> GalleryPlan:
         raise GalleryError("gallery 42: gone")
 
@@ -112,7 +120,9 @@ def test_main_returns_one_when_a_gallery_fails(tmp_path: Path, monkeypatch, caps
     assert "error: gallery 42: gone" in capsys.readouterr().err
 
 
-def test_main_keeps_going_after_a_failed_gallery(tmp_path: Path, monkeypatch) -> None:
+def test_main_keeps_going_after_a_failed_gallery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plan = make_plan(tmp_path / "42_Planned")
     seen: list[str] = []
 
@@ -130,12 +140,12 @@ def test_main_keeps_going_after_a_failed_gallery(tmp_path: Path, monkeypatch) ->
     assert plan.destination.exists()
 
 
-def test_force_ignores_the_saved_record(tmp_path: Path, monkeypatch) -> None:
+def test_force_ignores_the_saved_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     plan = make_plan(tmp_path / "42_Planned")
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
     monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
 
-    def unexpected(destination: Path) -> dict:
+    def unexpected(destination: Path) -> Never:
         raise AssertionError("the record should not be read with --force")
 
     monkeypatch.setattr(cli, "load_saved", unexpected)
@@ -143,7 +153,7 @@ def test_force_ignores_the_saved_record(tmp_path: Path, monkeypatch) -> None:
     assert cli.main(["42", "-o", str(tmp_path), "--force", "-j", "1"]) == 0
 
 
-def test_interrupt_returns_130(tmp_path: Path, monkeypatch) -> None:
+def test_interrupt_returns_130(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def interrupted(*args: object, **kwargs: object) -> GalleryPlan:
         raise KeyboardInterrupt
 
@@ -152,9 +162,9 @@ def test_interrupt_returns_130(tmp_path: Path, monkeypatch) -> None:
     assert cli.main(["42", "-o", str(tmp_path)]) == 130
 
 
-def test_videos_flag_downloads_videos(tmp_path: Path, monkeypatch) -> None:
+def test_videos_flag_downloads_videos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     plan = make_plan(tmp_path / "42_Planned")
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
     monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
 
@@ -166,10 +176,12 @@ def test_videos_flag_downloads_videos(tmp_path: Path, monkeypatch) -> None:
 
     assert cli.main(["42", "-o", str(tmp_path), "--videos", "-j", "1"]) == 0
     assert calls[0]["max_height"] is None
-    assert calls[0]["reuse"] is not cli.no_reuse
+    assert calls[0]["reuse"] is not no_reuse
 
 
-def test_videos_are_not_downloaded_without_the_flag(tmp_path: Path, monkeypatch) -> None:
+def test_videos_are_not_downloaded_without_the_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plan = make_plan(tmp_path / "42_Planned")
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
     monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
@@ -182,7 +194,9 @@ def test_videos_are_not_downloaded_without_the_flag(tmp_path: Path, monkeypatch)
     assert cli.main(["42", "-o", str(tmp_path), "-j", "1"]) == 0
 
 
-def test_video_failure_marks_the_gallery_failed(tmp_path: Path, monkeypatch) -> None:
+def test_video_failure_marks_the_gallery_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plan = make_plan(tmp_path / "42_Planned")
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
     monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
@@ -191,9 +205,9 @@ def test_video_failure_marks_the_gallery_failed(tmp_path: Path, monkeypatch) -> 
     assert cli.main(["42", "-o", str(tmp_path), "--videos", "-j", "1"]) == 1
 
 
-def test_force_passes_no_reuse_to_videos(tmp_path: Path, monkeypatch) -> None:
+def test_force_passes_no_reuse_to_videos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     plan = make_plan(tmp_path / "42_Planned")
-    recorded: list[dict] = []
+    recorded: list[dict[str, object]] = []
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
     monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
 
@@ -204,12 +218,14 @@ def test_force_passes_no_reuse_to_videos(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(cli, "download_videos", record)
 
     assert cli.main(["42", "-o", str(tmp_path), "--videos", "--force", "-j", "1"]) == 0
-    assert recorded[0]["reuse"] is cli.no_reuse
+    assert recorded[0]["reuse"] is no_reuse
 
 
-def test_video_height_reaches_the_video_step(tmp_path: Path, monkeypatch) -> None:
+def test_video_height_reaches_the_video_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plan = make_plan(tmp_path / "42_Planned")
-    recorded: list[dict] = []
+    recorded: list[dict[str, object]] = []
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
     monkeypatch.setattr(cli, "BehanceClient", lambda **kwargs: FakeClient(images={IMAGE_URL: PNG}))
 
@@ -225,7 +241,9 @@ def test_video_height_reaches_the_video_step(tmp_path: Path, monkeypatch) -> Non
     assert recorded[0]["max_height"] == 720
 
 
-def test_video_height_reaches_the_reuse_lookup(tmp_path: Path, monkeypatch) -> None:
+def test_video_height_reaches_the_reuse_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plan = make_plan(tmp_path / "42_Planned")
     caps: list[int | None] = []
     monkeypatch.setattr(cli, "plan_gallery", lambda *args, **kwargs: plan)
@@ -234,7 +252,7 @@ def test_video_height_reaches_the_reuse_lookup(tmp_path: Path, monkeypatch) -> N
 
     def capture(max_height: int | None) -> object:
         caps.append(max_height)
-        return cli.no_reuse
+        return no_reuse
 
     monkeypatch.setattr(cli, "reuse_downloaded", capture)
 

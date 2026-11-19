@@ -205,7 +205,9 @@ def test_save_gallery_removes_a_superseded_file(tmp_path: Path) -> None:
     assert not stale.exists()
 
 
-def test_save_gallery_keeps_a_locked_superseded_file(tmp_path: Path, monkeypatch) -> None:
+def test_save_gallery_keeps_a_locked_superseded_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     destination = tmp_path / "gallery"
     destination.mkdir()
     stale = destination / "001_a.png"
@@ -229,17 +231,23 @@ def test_save_gallery_keeps_a_locked_superseded_file(tmp_path: Path, monkeypatch
 
 
 def test_save_gallery_reports_a_manifest_write_failure_without_failing(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = FakeClient(images={"https://x/a.png": PNG})
     plan = make_plan(tmp_path / "gallery", "https://x/a.png")
 
     original = Path.write_text
 
-    def refuse(self: Path, data: str, encoding: str | None = None, **kwargs: object) -> None:
+    def refuse(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
         if self.name == MANIFEST_NAME + ".part":
             raise OSError(32, "in use")
-        original(self, data, encoding=encoding or "utf-8", **kwargs)
+        return original(self, data, encoding=encoding or "utf-8", errors=errors, newline=newline)
 
     monkeypatch.setattr(Path, "write_text", refuse)
 
@@ -342,7 +350,7 @@ def test_save_gallery_survives_a_caption_the_parser_refuses(tmp_path: Path) -> N
 
 
 def test_save_gallery_warns_when_the_transcript_cannot_be_written(
-    tmp_path: Path, monkeypatch, capsys
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     client = FakeClient(images={"https://x/a.png": PNG})
     plan = make_plan(
@@ -352,10 +360,16 @@ def test_save_gallery_warns_when_the_transcript_cannot_be_written(
     )
     original = Path.write_text
 
-    def refuse(self: Path, data: str, encoding: str | None = None, **kwargs: object) -> None:
+    def refuse(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
         if self.name == transcript_path(plan).name + ".part":
             raise OSError(32, "in use")
-        original(self, data, encoding=encoding or "utf-8", **kwargs)
+        return original(self, data, encoding=encoding or "utf-8", errors=errors, newline=newline)
 
     monkeypatch.setattr(Path, "write_text", refuse)
 

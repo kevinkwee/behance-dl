@@ -19,12 +19,16 @@ import urllib.parse
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .client import VIDEO, BehanceClient
+from .client import VIDEO
 from .errors import DownloadError
 from .models import EmbedAsset
 from .naming import safe_name
 from .storage import remove_superseded
+
+if TYPE_CHECKING:
+    from .client import GalleryClient
 
 CCV_PLAYER_HOST = "www-ccv.adobe.io"
 CCV_MEDIA_HOST = "cdn-prod-ccv.adobe.com"
@@ -118,7 +122,7 @@ def ccv_asset_id(url: str) -> str:
 
 
 def resolve_behance_video(
-    client: BehanceClient, embed: EmbedAsset, max_height: int | None
+    client: GalleryClient, embed: EmbedAsset, max_height: int | None
 ) -> ResolvedVideo:
     """Turn a Behance player embed into a direct MP4 URL, preferring the best rendition."""
     if not is_ccv_player_url(embed.source_url):
@@ -148,7 +152,7 @@ def rendition_height(url: str) -> int:
 
 
 def download_videos(
-    client: BehanceClient,
+    client: GalleryClient,
     embeds: Sequence[EmbedAsset],
     destination: Path,
     *,
@@ -229,7 +233,7 @@ def video_file_name(position: int, asset_id: str, height: int, url: str) -> str:
 
 
 def _save_video(
-    client: BehanceClient,
+    client: GalleryClient,
     embed: EmbedAsset,
     destination: Path,
     max_height: int | None,
@@ -259,7 +263,7 @@ def _existing_video(
 
 
 def _download_ccv(
-    client: BehanceClient,
+    client: GalleryClient,
     embed: EmbedAsset,
     destination: Path,
     max_height: int | None,

@@ -17,7 +17,7 @@ from .transcript import render_transcript, transcript_name
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from .client import BehanceClient
+    from .client import GalleryClient
 
 MANIFEST_NAME = "manifest.json"
 
@@ -53,7 +53,7 @@ def is_recorded_name(name: str, path: str) -> bool:
 
 
 def save_gallery(
-    client: BehanceClient,
+    client: GalleryClient,
     plan: GalleryPlan,
     saved: dict[str, SavedImage],
     *,
@@ -114,7 +114,7 @@ def write_page(destination: Path, name: str, document: str) -> None:
 
 
 def download_images(
-    client: BehanceClient,
+    client: GalleryClient,
     assets: Sequence[ImageAsset],
     destination: Path,
     saved: dict[str, SavedImage],
@@ -173,7 +173,7 @@ def report_finished(
 
 
 def save_image(
-    client: BehanceClient,
+    client: GalleryClient,
     asset: ImageAsset,
     directory: Path,
     recorded: SavedImage | None,

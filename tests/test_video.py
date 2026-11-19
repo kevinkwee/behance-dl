@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 import pytest
 
@@ -71,7 +71,7 @@ def fake_client(media: dict[str, bytes] | None = None) -> FakeClient:
     )
 
 
-def install_fake_youtube_dl(monkeypatch, fake: type) -> None:
+def install_fake_youtube_dl(monkeypatch: pytest.MonkeyPatch, fake: type) -> None:
     """Put a fake yt_dlp module in front of the optional import."""
     module = types.ModuleType("yt_dlp")
     monkeypatch.setattr(module, "YoutubeDL", fake, raising=False)
@@ -259,7 +259,9 @@ def test_download_videos_reuses_an_existing_file(tmp_path: Path) -> None:
     assert client.requested == []
 
 
-def test_download_videos_skips_interactive_embeds(tmp_path: Path, capsys) -> None:
+def test_download_videos_skips_interactive_embeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     failed = download_videos(
         FakeClient(), [embed(FIGMA_URL, 3)], tmp_path, max_height=None, reuse=reuse_downloaded(None)
     )
@@ -283,7 +285,9 @@ def test_download_videos_counts_a_failure_and_keeps_going(tmp_path: Path) -> Non
     assert (tmp_path / f"006_{ASSET_ID}_1080.mp4").exists()
 
 
-def test_download_videos_reports_a_missing_extra(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_download_videos_reports_a_missing_extra(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(sys.modules, "yt_dlp", None)
 
     failed = download_videos(
@@ -334,7 +338,9 @@ def test_fallback_names_the_file_after_the_rendition_it_fetched(tmp_path: Path) 
     assert [path.name for path in tmp_path.iterdir()] == [f"005_{ASSET_ID}_576.mp4"]
 
 
-def test_download_videos_ignores_stale_non_video_files(tmp_path: Path, monkeypatch) -> None:
+def test_download_videos_ignores_stale_non_video_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(sys.modules, "yt_dlp", None)
     (tmp_path / "005_old.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
     (tmp_path / "005_abc.f137.mp4.part").write_bytes(MP4_BYTES)
@@ -372,11 +378,13 @@ def test_existing_video_taller_than_the_cap_is_replaced(tmp_path: Path) -> None:
     assert not (tmp_path / f"005_{ASSET_ID}_1080.mp4").exists()
 
 
-def test_external_video_runs_yt_dlp_and_keeps_the_result(tmp_path: Path, monkeypatch) -> None:
+def test_external_video_runs_yt_dlp_and_keeps_the_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     saved: list[str] = []
 
     class FakeYoutubeDL:
-        def __init__(self, options: dict) -> None:
+        def __init__(self, options: dict[str, Any]) -> None:
             self._options = options
             self._path: Path | None = None
 
@@ -386,7 +394,7 @@ def test_external_video_runs_yt_dlp_and_keeps_the_result(tmp_path: Path, monkeyp
         def __exit__(self, *exc_info: object) -> None:
             return None
 
-        def extract_info(self, url: str, download: bool = False) -> dict:
+        def extract_info(self, url: str, download: bool = False) -> dict[str, object]:
             saved.append(url)
             name = self._options["outtmpl"].replace("%(id)s", "abc").replace("%(ext)s", "mp4")
             path = Path(self._options["paths"]["home"]) / name
@@ -431,9 +439,11 @@ def test_downloaded_path_ignores_records_without_a_file() -> None:
     assert downloaded_path(None) is None
 
 
-def test_playlist_embed_saves_one_entry_and_reports_success(tmp_path: Path, monkeypatch) -> None:
+def test_playlist_embed_saves_one_entry_and_reports_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class PlaylistYoutubeDL:
-        def __init__(self, options: dict) -> None:
+        def __init__(self, options: dict[str, Any]) -> None:
             self._options = options
 
         def __enter__(self) -> Self:
@@ -442,7 +452,7 @@ def test_playlist_embed_saves_one_entry_and_reports_success(tmp_path: Path, monk
         def __exit__(self, *exc_info: object) -> None:
             return None
 
-        def extract_info(self, url: str, download: bool = False) -> dict:
+        def extract_info(self, url: str, download: bool = False) -> dict[str, object]:
             saved = Path(self._options["paths"]["home"]) / "005_videoid.mp4"
             saved.write_bytes(MP4_BYTES)
             return {
@@ -467,11 +477,13 @@ def test_playlist_embed_saves_one_entry_and_reports_success(tmp_path: Path, monk
     assert (tmp_path / "005_videoid.mp4").exists()
 
 
-def test_external_options_keep_one_item_and_a_staging_dir(tmp_path: Path, monkeypatch) -> None:
-    recorded: list[dict] = []
+def test_external_options_keep_one_item_and_a_staging_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recorded: list[dict[str, Any]] = []
 
     class RecordingYoutubeDL:
-        def __init__(self, options: dict) -> None:
+        def __init__(self, options: dict[str, Any]) -> None:
             self._options = options
             recorded.append(options)
 
@@ -481,7 +493,7 @@ def test_external_options_keep_one_item_and_a_staging_dir(tmp_path: Path, monkey
         def __exit__(self, *exc_info: object) -> None:
             return None
 
-        def extract_info(self, url: str, download: bool = False) -> dict:
+        def extract_info(self, url: str, download: bool = False) -> dict[str, object]:
             saved = Path(self._options["paths"]["home"]) / "005_abc.mp4"
             saved.write_bytes(MP4_BYTES)
             return {"id": "abc", "requested_downloads": [{"filepath": str(saved)}]}
@@ -501,9 +513,11 @@ def test_external_options_keep_one_item_and_a_staging_dir(tmp_path: Path, monkey
     assert options["paths"]["temp"] != options["paths"]["home"]
 
 
-def test_failed_external_download_leaves_no_file(tmp_path: Path, monkeypatch) -> None:
+def test_failed_external_download_leaves_no_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class FailingYoutubeDL:
-        def __init__(self, options: dict) -> None:
+        def __init__(self, options: dict[str, Any]) -> None:
             self._options = options
 
         def __enter__(self) -> Self:
@@ -512,7 +526,7 @@ def test_failed_external_download_leaves_no_file(tmp_path: Path, monkeypatch) ->
         def __exit__(self, *exc_info: object) -> None:
             return None
 
-        def extract_info(self, url: str, download: bool = False) -> dict:
+        def extract_info(self, url: str, download: bool = False) -> dict[str, object]:
             paths = self._options["paths"]
             staging = Path(paths.get("temp", paths["home"]))
             (staging / "005_abc.mp4.part").write_bytes(b"partial")
@@ -544,9 +558,11 @@ def test_superseded_cleanup_stays_within_one_position(tmp_path: Path) -> None:
     assert other.exists()
 
 
-def test_empty_external_result_is_reported_without_crashing(tmp_path: Path, monkeypatch) -> None:
+def test_empty_external_result_is_reported_without_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class EmptyYoutubeDL:
-        def __init__(self, options: dict) -> None:
+        def __init__(self, options: dict[str, Any]) -> None:
             self._options = options
 
         def __enter__(self) -> Self:
@@ -555,7 +571,7 @@ def test_empty_external_result_is_reported_without_crashing(tmp_path: Path, monk
         def __exit__(self, *exc_info: object) -> None:
             return None
 
-        def extract_info(self, url: str, download: bool = False) -> dict:
+        def extract_info(self, url: str, download: bool = False) -> dict[str, object]:
             return {"id": "empty", "entries": []}
 
     install_fake_youtube_dl(monkeypatch, EmptyYoutubeDL)

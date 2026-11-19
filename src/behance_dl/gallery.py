@@ -14,7 +14,7 @@ from .models import EmbedAsset, GalleryProject, TextBlock
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from .client import BehanceClient
+    from .client import GalleryClient
 
 BEHANCE_ORIGIN = "https://www.behance.net"
 
@@ -53,7 +53,7 @@ def parse_gallery_id(gallery: str) -> int:
     return int(match.group(1))
 
 
-def fetch_project(client: BehanceClient, gallery_id: int) -> GalleryProject:
+def fetch_project(client: GalleryClient, gallery_id: int) -> GalleryProject:
     """Load the project payload embedded in a gallery page."""
     # Behance answers 404 for /gallery/{id} alone and ignores whatever slug follows it.
     page = client.get_text(f"{BEHANCE_ORIGIN}/gallery/{gallery_id}/gallery")

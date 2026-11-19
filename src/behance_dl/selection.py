@@ -21,7 +21,7 @@ from .models import GalleryPlan, GalleryProject, ImageAsset, Slide
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from .client import BehanceClient
+    from .client import GalleryClient
 
 _SOURCE_BUCKET = "source"
 _STILL_BUCKET_SUFFIX = "_still"
@@ -156,7 +156,7 @@ def plan_slides(project: GalleryProject, max_width: int | None) -> list[Slide]:
 
 
 def plan_gallery(
-    client: BehanceClient, gallery: str, max_width: int | None, output_root: Path
+    client: GalleryClient, gallery: str, max_width: int | None, output_root: Path
 ) -> GalleryPlan:
     """Fetch one gallery and resolve every asset it will produce."""
     gallery_id = parse_gallery_id(gallery)

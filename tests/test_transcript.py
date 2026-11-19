@@ -255,7 +255,9 @@ def test_markdown_text_keeps_the_words_of_an_unknown_marked_section() -> None:
     assert "after" in markdown_text("<![foo[ x ]]>after")
 
 
-def test_markdown_text_falls_back_to_plain_text_when_the_parser_refuses(monkeypatch) -> None:
+def test_markdown_text_falls_back_to_plain_text_when_the_parser_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def refuse(self: MarkdownWriter, markup: str) -> None:
         raise AssertionError("unknown status keyword 'foo' in marked section")
 
@@ -264,7 +266,9 @@ def test_markdown_text_falls_back_to_plain_text_when_the_parser_refuses(monkeypa
     assert markdown_text("<div>words</div>") == r"\<div\>words\</div\>"
 
 
-def test_markdown_text_escapes_a_line_start_in_the_parser_fallback(monkeypatch) -> None:
+def test_markdown_text_escapes_a_line_start_in_the_parser_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def refuse(self: MarkdownWriter, markup: str) -> None:
         raise AssertionError("unknown status keyword 'foo' in marked section")
 
