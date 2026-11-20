@@ -13,14 +13,14 @@ jobs:
     name: Build the distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: "3.13"
       - name: Build the wheel and sdist
         run: uv build
       - name: Store the distribution
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -36,7 +36,7 @@ jobs:
       id-token: write
     steps:
       - name: Fetch the distribution
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
@@ -51,11 +51,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build the notes from the changelog
         run: python .github/scripts/release_notes.py "$GITHUB_REF_NAME" > release-notes.md
       - name: Fetch the published files
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
