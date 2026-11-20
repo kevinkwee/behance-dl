@@ -5,6 +5,7 @@
   <a href="https://pypi.org/project/behance-dl/"><img src="https://img.shields.io/pypi/pyversions/behance-dl" alt="Supported Python versions"></a>
   <a href="https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush"><img src="https://github.com/kevinkwee/behance-dl/actions/workflows/ci.yml/badge.svg?branch=main&amp;event=push" alt="CI status"></a>
   <a href="https://github.com/kevinkwee/behance-dl/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/behance-dl" alt="License: MIT"></a>
+  <a href="https://ko-fi.com/kevinkwee27"><img src="https://img.shields.io/badge/Ko--fi-Support%20this%20project-ff5f5f?logo=ko-fi&amp;logoColor=white" alt="Ko-fi: support this project"></a>
 </p>
 
 Download the images of a public [Behance](https://www.behance.net) project gallery.
