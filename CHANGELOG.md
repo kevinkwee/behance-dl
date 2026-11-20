@@ -7,15 +7,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
-
-- `GalleryClient`, the two-method protocol that every public function taking a client now accepts.
-
-### Changed
-
-- Ruff now selects all stable rules, with a reasoned waiver list, Google docstring conventions, and explicit formatter settings.
-- Tests are type-checked under mypy strict.
-
 ## [0.3.0] - 2026-11-16
 
 ### Added

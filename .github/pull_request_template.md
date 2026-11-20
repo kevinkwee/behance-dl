@@ -40,5 +40,5 @@ does not touch code.
 - [ ] `uv run pytest` passes
 - [ ] `uv run mypy` passes
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass
-- [ ] `CHANGELOG.md` has an entry under `[Unreleased]` for a user-facing change
+- [ ] `CHANGELOG.md` has an entry under `[Unreleased]` for a user-observable change
 - [ ] `README.md` and `AGENTS.md` match the code where behaviour or architecture changed

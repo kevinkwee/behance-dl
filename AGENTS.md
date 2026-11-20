@@ -106,7 +106,7 @@ Follow this order and stop at the first step that fits.
 - Avoid `Any` except where a JSON payload is genuinely untyped, and narrow it immediately with `isinstance` checks.
 - Do not cast to `Any` to make an error disappear. A cast to a concrete type is allowed where a signature outside this project is imprecise, and needs a comment saying why.
 - A `# type: ignore` carries the same obligations as a `# noqa`: the specific error code and a reason.
-- The package ships `src/behance_dl/py.typed`, so every public annotation is part of the published API and a change to one is semver-visible. `tests/test_packaging.py` guards the marker.
+- The package ships `src/behance_dl/py.typed`, so type checkers read the package's annotations. `tests/test_packaging.py` guards the marker.
 - Tests are annotated and checked under the same strict settings, because a fake must honour the contract it stands in for.
 
 ### Immutability
@@ -339,6 +339,7 @@ uv build
 ## Versioning
 
 - The version lives in `src/behance_dl/__init__.py` and Hatchling reads it from there, so bump it in one place.
+- A user-observable change is one to the command's options, the files it writes, the messages it prints, its exit code, or what a user must install. Semantic Versioning covers those, and the `behance_dl` import package carries no compatibility promise.
 - Every release must come from a working tree with passing tests, passing lint, passing types, and no uncommitted changes.
 
 ## Code Review
@@ -362,10 +363,10 @@ uv build
 
 ## Documentation
 
-- Update `README.md` when user-facing behaviour, an option, or the output layout changes.
+- Update `README.md` when a user-observable change makes anything it documents out of date.
 - Update this file when a module, an invariant, or a recorded command changes.
-- Record every user-facing change under `CHANGELOG.md` -> `## [Unreleased]`, and never rewrite a released section.
-- Both files describe the current code. Never narrate history in them.
+- Record every user-observable change under `CHANGELOG.md` -> `## [Unreleased]`, and never rewrite a released section, because it becomes the GitHub release notes. An importer-only change, such as an annotation or a parameter name, is not an entry.
+- `README.md` and this file describe the current code. Never narrate history in them.
 
 ## Key Concepts
 
