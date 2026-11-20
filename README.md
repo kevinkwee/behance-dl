@@ -178,8 +178,8 @@ uv build
 
 ## Changelog
 
-Release notes live in [CHANGELOG.md](CHANGELOG.md), and every tagged version has a
-[GitHub release](https://github.com/kevinkwee/behance-dl/releases).
+Release notes live in [CHANGELOG.md](https://github.com/kevinkwee/behance-dl/blob/main/CHANGELOG.md),
+and every tagged version has a [GitHub release](https://github.com/kevinkwee/behance-dl/releases).
 
 ## Sponsor
 
@@ -188,4 +188,4 @@ If `behance-dl` saves you time, you can
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/kevinkwee/behance-dl/blob/main/LICENSE).
