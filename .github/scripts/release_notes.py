@@ -17,13 +17,20 @@ def section(version: str, changelog: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    """Print the notes for the version named by the first argument."""
+    """Print the notes for the version named by the first argument.
+
+    Print nothing to standard output when the changelog has no notes for that version.
+    """
     arguments = argv[1:]
     if not arguments:
         print("usage: release_notes.py <tag>", file=sys.stderr)
         return 2
     version = arguments[0].strip().lstrip("v")
-    print(section(version, CHANGELOG.read_text(encoding="utf-8")))
+    notes = section(version, CHANGELOG.read_text(encoding="utf-8"))
+    if not notes:
+        print(f"no changelog notes for {version}", file=sys.stderr)
+        return 0
+    print(notes)
     return 0
 
 
